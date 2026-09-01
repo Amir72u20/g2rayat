@@ -20,18 +20,7 @@ export function PageStrip({ variant = "row" }: { variant?: "row" | "col" }) {
 
   return (
     <div className={cn("flex items-stretch gap-2", col && "flex-col")}>
-      <button
-        type="button"
-        onClick={addPage}
-        className={cn(
-          "flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line text-muted hover:text-fg",
-          col ? "h-14 w-full" : "w-16",
-        )}
-      >
-        <Plus className="size-4" />
-        <span className="text-[10px] leading-tight">صفحه تازه</span>
-      </button>
-      <div className={cn("flex min-w-0 flex-1 gap-2", col ? "flex-col overflow-y-auto" : "no-scrollbar overflow-x-auto")}>
+      <div className={cn("flex min-w-0 flex-1 gap-2", col ? "flex-col" : "rail-x no-scrollbar")}>
         {pages.map((p, i) => (
           <Thumb
             key={p.id}
@@ -43,10 +32,34 @@ export function PageStrip({ variant = "row" }: { variant?: "row" | "col" }) {
             wide={col}
           />
         ))}
+        <button
+          type="button"
+          onClick={addPage}
+          className={cn(
+            "tap flex shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-line text-muted hover:border-brand/60 hover:bg-elevated hover:text-fg",
+            col ? "h-16 w-full" : "w-20",
+          )}
+        >
+          <Plus className="size-4" />
+          <span className="text-[10px] leading-tight">صفحه تازه</span>
+        </button>
       </div>
-      <div className={cn("shrink-0 gap-1", col ? "grid grid-cols-2" : "hidden flex-col sm:flex")}>
-        <Button variant="outline" size="sm" onClick={() => movePage(pageIndex, pageIndex - 1)} disabled={pageIndex <= 0}>
-          <ChevronUp /> قبل
+
+      {/* Page-level actions. On the phone sheet they sit under the list; on the
+          desktop rail they stay pinned beside it. */}
+      <div
+        className={cn(
+          "shrink-0 gap-1.5",
+          col ? "mt-1 grid grid-cols-2" : "hidden flex-col sm:flex",
+        )}
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => movePage(pageIndex, pageIndex - 1)}
+          disabled={pageIndex <= 0}
+        >
+          <ChevronUp /> بالا
         </Button>
         <Button
           variant="outline"
@@ -54,12 +67,12 @@ export function PageStrip({ variant = "row" }: { variant?: "row" | "col" }) {
           onClick={() => movePage(pageIndex, pageIndex + 1)}
           disabled={pageIndex >= pages.length - 1}
         >
-          <ChevronDown /> بعد
+          <ChevronDown /> پایین
         </Button>
         <Button variant="outline" size="sm" onClick={duplicatePage}>
           <Copy /> کپی
         </Button>
-        <Button variant="destructive" size="sm" onClick={deletePage}>
+        <Button variant="destructive" size="sm" onClick={deletePage} disabled={pages.length <= 1}>
           <Trash2 /> حذف
         </Button>
       </div>
@@ -111,15 +124,27 @@ function Thumb({
     <button
       type="button"
       onClick={onClick}
+      aria-current={active ? "true" : undefined}
       className={cn(
-        "shrink-0 overflow-hidden rounded-lg bg-elevated text-center",
-        wide ? "flex w-full items-center gap-2 p-1 text-start" : "w-[76px]",
-        active ? "ring-2 ring-steel" : "shadow-[var(--shadow-border)]",
+        "tap group relative shrink-0 overflow-hidden rounded-lg bg-elevated text-center",
+        wide ? "flex w-full items-center gap-2.5 p-1.5 text-start" : "w-20",
+        active
+          ? "bg-brand/10 shadow-[0_0_0_1.5px_var(--color-brand)]"
+          : "shadow-[var(--shadow-border)] hover:bg-overlay",
       )}
     >
-      <canvas ref={ref} className={cn("block bg-ink", wide ? "h-16 w-12 rounded-md" : "h-24 w-full")} />
-      <span className="block truncate px-1 py-1 text-[10px]">
-        {index + 1}. {name}
+      <canvas
+        ref={ref}
+        className={cn(
+          "block rounded-md bg-ink shadow-[var(--shadow-border)]",
+          wide ? "h-16 w-12 shrink-0" : "h-24 w-full",
+        )}
+      />
+      <span className={cn("min-w-0 flex-1", wide ? "block" : "block px-1 py-1")}>
+        <span className={cn("block truncate text-[11px] font-medium", active && "text-brand")}>
+          {name}
+        </span>
+        <span className="num block text-[10px] text-muted">صفحه {index + 1}</span>
       </span>
     </button>
   );

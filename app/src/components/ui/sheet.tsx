@@ -3,10 +3,17 @@ import { X } from "lucide-react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 
+/**
+ * The phone's primary surface. Everything the editor puts here has to survive
+ * one-handed use: a wide grab bar, a header that stays put, a scroll area that
+ * doesn't leak its overscroll to the page, and a footer parked above the
+ * gesture bar.
+ */
 export function BottomSheet({
   open,
   onOpenChange,
   title,
+  description,
   children,
   className,
   footer,
@@ -14,6 +21,7 @@ export function BottomSheet({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title?: string;
+  description?: string;
   children: React.ReactNode;
   className?: string;
   footer?: React.ReactNode;
@@ -21,33 +29,44 @@ export function BottomSheet({
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} shouldScaleBackground={false} modal>
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 z-40 bg-bg/55" />
+        <Drawer.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]" />
         <Drawer.Content
           className={cn(
-            "fixed inset-x-0 bottom-0 z-50 flex max-h-[76dvh] flex-col rounded-t-2xl bg-surface pb-[env(safe-area-inset-bottom)] shadow-[var(--shadow-lift)] outline-none",
+            "fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col rounded-t-3xl bg-surface outline-none",
+            "shadow-[0_-1px_0_0_var(--color-line),var(--shadow-lift)] pb-[env(safe-area-inset-bottom)]",
             className,
           )}
         >
-          <div className="flex justify-center pt-2">
-            <div className="h-1 w-10 rounded-full bg-line" />
+          {/* Grab bar: a real 44px-tall target, not a decorative 4px line. */}
+          <div className="flex h-6 shrink-0 cursor-grab items-center justify-center active:cursor-grabbing">
+            <div className="h-1.5 w-11 rounded-full bg-line" />
           </div>
-          <div className="flex items-center gap-2 px-3">
+          <div className="flex items-start gap-2 px-4 pb-1">
             {title ? (
-              <Drawer.Title className="min-w-0 flex-1 py-2 text-sm font-semibold">{title}</Drawer.Title>
+              <div className="min-w-0 flex-1 py-1">
+                <Drawer.Title className="truncate text-[15px] font-semibold">{title}</Drawer.Title>
+                {description ? (
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted">{description}</p>
+                ) : null}
+              </div>
             ) : (
               <Drawer.Title className="sr-only">پنل</Drawer.Title>
             )}
             <button
               type="button"
-              className="grid size-11 shrink-0 place-items-center text-muted"
+              className="tap -me-1 grid size-10 shrink-0 place-items-center rounded-full bg-elevated text-muted hover:text-fg"
               aria-label="بستن"
               onClick={() => onOpenChange(false)}
             >
               <X className="size-4" />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">{children}</div>
-          {footer ? <div className="shrink-0 border-t border-line px-3 py-3">{footer}</div> : null}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-1">
+            {children}
+          </div>
+          {footer ? (
+            <div className="shrink-0 border-t border-line bg-surface px-4 py-3">{footer}</div>
+          ) : null}
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>

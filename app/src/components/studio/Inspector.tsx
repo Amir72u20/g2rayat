@@ -1,5 +1,9 @@
 import { useRef, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
   FlipHorizontal,
   FlipVertical,
   Pause,
@@ -9,15 +13,30 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { COMIC_FONTS } from "@/lib/comic/fonts";
 import { itemLabel } from "@/lib/comic/factory";
 import { useStudio } from "@/lib/comic/store";
-import { PAGE_SIZES, LANGUAGES, type BubbleKind, type ComicItem, type InspectorTab, type PanelKind, type VideoItem } from "@/lib/comic/types";
+import {
+  PAGE_SIZES,
+  LANGUAGES,
+  type BubbleKind,
+  type ComicItem,
+  type InspectorTab,
+  type PanelKind,
+  type VideoItem,
+} from "@/lib/comic/types";
 import { LayoutGrid, PageBackgroundPicker, PanelKindGrid } from "./ComicBits";
-import { loadVideoAsset, playVideo, pauseVideo, seekVideo, getMediaBag } from "@/lib/comic/media-cache";
+import {
+  loadVideoAsset,
+  playVideo,
+  pauseVideo,
+  seekVideo,
+  getMediaBag,
+} from "@/lib/comic/media-cache";
 import { thumbUrl, mediaUrl } from "@/lib/comic/db";
 import { cn } from "@/lib/utils";
 
@@ -66,13 +85,20 @@ export function Inspector({
 
   return (
     <aside className={cn("flex min-h-0 flex-col bg-surface", className)}>
-      <div className={cn("no-scrollbar gap-1 overflow-x-auto border-b border-line px-2 py-2", hideTabs ? "hidden" : "hidden lg:flex")}>
+      <div
+        className={cn(
+          "no-scrollbar gap-1 overflow-x-auto border-b border-line px-2 py-2",
+          hideTabs ? "hidden" : "hidden lg:flex",
+        )}
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`h-9 shrink-0 rounded-md px-3 text-xs font-medium ${tab === t.id ? "bg-select/30 text-select-fg" : "text-muted hover:text-fg"}`}
+            className={`tap h-9 shrink-0 rounded-md px-3 text-xs font-medium ${
+              tab === t.id ? "bg-brand/15 text-brand" : "text-muted hover:bg-elevated hover:text-fg"
+            }`}
           >
             {t.label}
           </button>
@@ -86,7 +112,9 @@ export function Inspector({
             {tab === "props" && <SelectionProperties onPickFiles={onPickFiles} />}
             {tab === "pages" && <PagesPane onPickFiles={onPickFiles} />}
             {tab === "layers" && <LayersPane />}
-            {tab === "export" && <ExportPane onExportPage={onExportPage} onExportAll={onExportAll} onRead={onRead} />}
+            {tab === "export" && (
+              <ExportPane onExportPage={onExportPage} onExportAll={onExportAll} onRead={onRead} />
+            )}
           </>
         )}
       </div>
@@ -111,7 +139,9 @@ function SelectionProperties({
   if (!selected) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-muted">قاب را بگیر و جابه‌جا کن. برای قاب تازه، چیدمان بزن یا روی صفحه بکش.</p>
+        <p className="text-sm text-muted">
+          قاب را بگیر و جابه‌جا کن. برای قاب تازه، چیدمان بزن یا روی صفحه بکش.
+        </p>
         <PageBackgroundPicker onPickImage={() => onPickFiles("image", undefined, "bg")} />
         <div>
           <div className="mb-2 text-xs font-semibold">چیدمان قاب‌ها</div>
@@ -144,16 +174,26 @@ function SelectionProperties({
       {(selected.type === "bubble" || selected.type === "text") && <BubbleFields item={selected} />}
       {selected.type === "image" && (
         <>
-          <Button variant="outline" size="sm" onClick={() => onPickFiles("image", selected.panelId, undefined)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPickFiles("image", selected.panelId, undefined)}
+          >
             جایگزینی تصویر
           </Button>
-          <p className="text-xs text-muted">روی بوم داخل قاب بکش تا عکس جابه‌جا شود. دو انگشت بزرگ‌نمایی است.</p>
+          <p className="text-xs text-muted">
+            روی بوم داخل قاب بکش تا عکس جابه‌جا شود. دو انگشت بزرگ‌نمایی است.
+          </p>
           <MediaCrop item={selected} />
         </>
       )}
       {selected.type === "video" && (
         <>
-          <Button variant="outline" size="sm" onClick={() => onPickFiles("video", selected.panelId)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPickFiles("video", selected.panelId)}
+          >
             جایگزینی ویدئو
           </Button>
           <VideoEditor item={selected} />
@@ -161,21 +201,55 @@ function SelectionProperties({
         </>
       )}
       {selected.type === "panel" && (
-        <div className="space-y-2 rounded-lg bg-elevated p-3">
+        <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
           <div className="text-xs font-semibold">شکل قاب</div>
           <PanelKindGrid
             value={selected.kind}
-            onPick={(k: PanelKind) => patchItem(selected.id, { kind: k } as Partial<ComicItem>, true)}
+            onPick={(k: PanelKind) =>
+              patchItem(selected.id, { kind: k } as Partial<ComicItem>, true)
+            }
           />
-          <p className="text-[11px] text-muted">قاب را روی صفحه بکش. گوشه‌ها اندازه را عوض می‌کنند.</p>
-          <Range label="ضخامت خط" value={selected.stroke} min={0} max={24} onChange={(v) => patchItem(selected.id, { stroke: v } as Partial<ComicItem>, false)} />
-          <Range label="گردی گوشه" value={selected.radius} min={0} max={60} onChange={(v) => patchItem(selected.id, { radius: v } as Partial<ComicItem>, false)} />
+          <p className="text-[11px] text-muted">
+            قاب را روی صفحه بکش. گوشه‌ها اندازه را عوض می‌کنند.
+          </p>
+          <Range
+            label="ضخامت خط"
+            value={selected.stroke}
+            min={0}
+            max={24}
+            onChange={(v) => patchItem(selected.id, { stroke: v } as Partial<ComicItem>, false)}
+          />
+          <Range
+            label="گردی گوشه"
+            value={selected.radius}
+            min={0}
+            max={60}
+            onChange={(v) => patchItem(selected.id, { radius: v } as Partial<ComicItem>, false)}
+          />
           <div className="grid grid-cols-2 gap-2">
             <Field label="رنگ خط">
-              <input type="color" value={selected.strokeColor} onChange={(e) => patchItem(selected.id, { strokeColor: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+              <input
+                type="color"
+                value={selected.strokeColor}
+                onChange={(e) =>
+                  patchItem(
+                    selected.id,
+                    { strokeColor: e.target.value } as Partial<ComicItem>,
+                    false,
+                  )
+                }
+                className="h-11 w-full"
+              />
             </Field>
             <Field label="رنگ داخل">
-              <input type="color" value={selected.fill} onChange={(e) => patchItem(selected.id, { fill: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+              <input
+                type="color"
+                value={selected.fill}
+                onChange={(e) =>
+                  patchItem(selected.id, { fill: e.target.value } as Partial<ComicItem>, false)
+                }
+                className="h-11 w-full"
+              />
             </Field>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -185,28 +259,62 @@ function SelectionProperties({
             <Button variant="outline" size="sm" onClick={() => onPickFiles("video", selected.id)}>
               ویدئو داخل قاب
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onPickFiles("audio", undefined, "panel-audio")}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPickFiles("audio", undefined, "panel-audio")}
+            >
               صدای قاب
             </Button>
           </div>
         </div>
       )}
       {selected.type === "shape" && (
-        <div className="space-y-2 rounded-lg bg-elevated p-3">
-          <Range label="ضخامت خط" value={selected.stroke} min={0} max={24} onChange={(v) => patchItem(selected.id, { stroke: v } as Partial<ComicItem>, false)} />
-          <Range label="گردی" value={selected.radius} min={0} max={80} onChange={(v) => patchItem(selected.id, { radius: v } as Partial<ComicItem>, false)} />
+        <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
+          <Range
+            label="ضخامت خط"
+            value={selected.stroke}
+            min={0}
+            max={24}
+            onChange={(v) => patchItem(selected.id, { stroke: v } as Partial<ComicItem>, false)}
+          />
+          <Range
+            label="گردی"
+            value={selected.radius}
+            min={0}
+            max={80}
+            onChange={(v) => patchItem(selected.id, { radius: v } as Partial<ComicItem>, false)}
+          />
           <div className="grid grid-cols-2 gap-2">
             <Field label="پر">
-              <input type="color" value={selected.fill} onChange={(e) => patchItem(selected.id, { fill: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+              <input
+                type="color"
+                value={selected.fill}
+                onChange={(e) =>
+                  patchItem(selected.id, { fill: e.target.value } as Partial<ComicItem>, false)
+                }
+                className="h-11 w-full"
+              />
             </Field>
             <Field label="خط">
-              <input type="color" value={selected.strokeColor} onChange={(e) => patchItem(selected.id, { strokeColor: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+              <input
+                type="color"
+                value={selected.strokeColor}
+                onChange={(e) =>
+                  patchItem(
+                    selected.id,
+                    { strokeColor: e.target.value } as Partial<ComicItem>,
+                    false,
+                  )
+                }
+                className="h-11 w-full"
+              />
             </Field>
           </div>
         </div>
       )}
       {selected.type === "drawing" && (
-        <div className="space-y-2 rounded-lg bg-elevated p-3">
+        <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
           <Field label="رنگ قلم">
             <input
               type="color"
@@ -228,28 +336,70 @@ function SelectionProperties({
               patchItem(selected.id, { width: v } as Partial<ComicItem>, false);
             }}
           />
-          <p className="text-[11px] text-muted">رنگ پیش‌فرض قلم: {drawColor} · {drawWidth}px</p>
+          <p className="text-[11px] text-muted">
+            رنگ پیش‌فرض قلم: {drawColor} · {drawWidth}px
+          </p>
         </div>
       )}
-      <details className="rounded-lg bg-elevated p-3">
-        <summary className="cursor-pointer text-xs font-semibold">جایگاه و چرخش</summary>
+      <details className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold marker:hidden">
+          جایگاه و چرخش
+        </summary>
         <div className="mt-3 space-y-2">
-          <Range label="شفافیت" value={Math.round((selected.opacity ?? 1) * 100)} min={0} max={100} onChange={(v) => patchItem(selected.id, { opacity: v / 100 } as Partial<ComicItem>, false)} />
+          <Range
+            label="شفافیت"
+            value={Math.round((selected.opacity ?? 1) * 100)}
+            min={0}
+            max={100}
+            onChange={(v) =>
+              patchItem(selected.id, { opacity: v / 100 } as Partial<ComicItem>, false)
+            }
+          />
           {selected.type !== "panel" && (
-            <Range label="چرخش" value={selected.rot || 0} min={-180} max={180} onChange={(v) => patchItem(selected.id, { rot: v } as Partial<ComicItem>, false)} />
+            <Range
+              label="چرخش"
+              value={selected.rot || 0}
+              min={-180}
+              max={180}
+              onChange={(v) => patchItem(selected.id, { rot: v } as Partial<ComicItem>, false)}
+            />
           )}
           <div className="grid grid-cols-2 gap-2">
             <Field label="X">
-              <Input type="number" value={Math.round(selected.x)} onChange={(e) => patchItem(selected.id, { x: Number(e.target.value) } as Partial<ComicItem>, false)} />
+              <Input
+                type="number"
+                value={Math.round(selected.x)}
+                onChange={(e) =>
+                  patchItem(selected.id, { x: Number(e.target.value) } as Partial<ComicItem>, false)
+                }
+              />
             </Field>
             <Field label="Y">
-              <Input type="number" value={Math.round(selected.y)} onChange={(e) => patchItem(selected.id, { y: Number(e.target.value) } as Partial<ComicItem>, false)} />
+              <Input
+                type="number"
+                value={Math.round(selected.y)}
+                onChange={(e) =>
+                  patchItem(selected.id, { y: Number(e.target.value) } as Partial<ComicItem>, false)
+                }
+              />
             </Field>
             <Field label="W">
-              <Input type="number" value={Math.round(selected.w)} onChange={(e) => patchItem(selected.id, { w: Number(e.target.value) } as Partial<ComicItem>, false)} />
+              <Input
+                type="number"
+                value={Math.round(selected.w)}
+                onChange={(e) =>
+                  patchItem(selected.id, { w: Number(e.target.value) } as Partial<ComicItem>, false)
+                }
+              />
             </Field>
             <Field label="H">
-              <Input type="number" value={Math.round(selected.h)} onChange={(e) => patchItem(selected.id, { h: Number(e.target.value) } as Partial<ComicItem>, false)} />
+              <Input
+                type="number"
+                value={Math.round(selected.h)}
+                onChange={(e) =>
+                  patchItem(selected.id, { h: Number(e.target.value) } as Partial<ComicItem>, false)
+                }
+              />
             </Field>
           </div>
         </div>
@@ -266,7 +416,13 @@ function BubbleFields({ item }: { item: Extract<ComicItem, { type: "bubble" | "t
   return (
     <>
       <Field label="متن">
-        <Textarea rows={3} value={item.text} onChange={(e) => patchItem(item.id, { text: e.target.value } as Partial<ComicItem>, false)} />
+        <Textarea
+          rows={3}
+          value={item.text}
+          onChange={(e) =>
+            patchItem(item.id, { text: e.target.value } as Partial<ComicItem>, false)
+          }
+        />
       </Field>
       <Button
         className="w-full"
@@ -278,55 +434,108 @@ function BubbleFields({ item }: { item: Extract<ComicItem, { type: "bubble" | "t
       </Button>
       <div className="grid grid-cols-2 gap-2">
         <Field label="فونت">
-          <select
-            className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+          <Select
             value={item.fontFamily}
-            onChange={(e) => patchItem(item.id, { fontFamily: e.target.value } as Partial<ComicItem>, false)}
+            onChange={(e) =>
+              patchItem(item.id, { fontFamily: e.target.value } as Partial<ComicItem>, false)
+            }
           >
             {COMIC_FONTS.map((f) => (
               <option key={f.v} value={f.v}>
                 {f.n}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
-        <Range label="اندازه" value={item.font} min={12} max={96} onChange={(v) => patchItem(item.id, { font: v } as Partial<ComicItem>, false)} />
+        <Range
+          label="اندازه"
+          value={item.font}
+          min={12}
+          max={96}
+          onChange={(v) => patchItem(item.id, { font: v } as Partial<ComicItem>, false)}
+        />
       </div>
       <div className="flex gap-1">
-        <Toggle on={!!item.bold} onClick={() => patchItem(item.id, { bold: !item.bold } as Partial<ComicItem>, false)}>
+        <Toggle
+          on={!!item.bold}
+          onClick={() => patchItem(item.id, { bold: !item.bold } as Partial<ComicItem>, false)}
+        >
           B
         </Toggle>
-        <Toggle on={!!item.italic} onClick={() => patchItem(item.id, { italic: !item.italic } as Partial<ComicItem>, false)}>
+        <Toggle
+          on={!!item.italic}
+          onClick={() => patchItem(item.id, { italic: !item.italic } as Partial<ComicItem>, false)}
+        >
           I
         </Toggle>
         {(["right", "center", "left"] as const).map((a) => (
-          <Toggle key={a} on={item.align === a} onClick={() => patchItem(item.id, { align: a } as Partial<ComicItem>, false)}>
+          <Toggle
+            key={a}
+            on={item.align === a}
+            onClick={() => patchItem(item.id, { align: a } as Partial<ComicItem>, false)}
+          >
             {a === "right" ? "راست" : a === "center" ? "وسط" : "چپ"}
           </Toggle>
         ))}
       </div>
       <div className="grid grid-cols-2 gap-2">
         <Field label="رنگ متن">
-          <input type="color" value={item.color} onChange={(e) => patchItem(item.id, { color: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+          <input
+            type="color"
+            value={item.color}
+            onChange={(e) =>
+              patchItem(item.id, { color: e.target.value } as Partial<ComicItem>, false)
+            }
+            className="h-11 w-full"
+          />
         </Field>
         {item.type === "bubble" && (
           <Field label="رنگ حباب">
-            <input type="color" value={item.fill} onChange={(e) => patchItem(item.id, { fill: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+            <input
+              type="color"
+              value={item.fill}
+              onChange={(e) =>
+                patchItem(item.id, { fill: e.target.value } as Partial<ComicItem>, false)
+              }
+              className="h-11 w-full"
+            />
           </Field>
         )}
       </div>
       {item.type === "bubble" && (
         <>
-          <Range label="ضخامت خط" value={item.stroke} min={0} max={20} onChange={(v) => patchItem(item.id, { stroke: v } as Partial<ComicItem>, false)} />
-          <Range label="گردی" value={item.radius} min={0} max={80} onChange={(v) => patchItem(item.id, { radius: v } as Partial<ComicItem>, false)} />
-          <Range label="طول دنباله" value={item.tail} min={20} max={240} onChange={(v) => patchItem(item.id, { tail: v } as Partial<ComicItem>, false)} />
+          <Range
+            label="ضخامت خط"
+            value={item.stroke}
+            min={0}
+            max={20}
+            onChange={(v) => patchItem(item.id, { stroke: v } as Partial<ComicItem>, false)}
+          />
+          <Range
+            label="گردی"
+            value={item.radius}
+            min={0}
+            max={80}
+            onChange={(v) => patchItem(item.id, { radius: v } as Partial<ComicItem>, false)}
+          />
+          <Range
+            label="طول دنباله"
+            value={item.tail}
+            min={20}
+            max={240}
+            onChange={(v) => patchItem(item.id, { tail: v } as Partial<ComicItem>, false)}
+          />
         </>
       )}
     </>
   );
 }
 
-function PagesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "audio", panelId?: string, extra?: string) => void }) {
+function PagesPane({
+  onPickFiles,
+}: {
+  onPickFiles: (kind: "image" | "video" | "audio", panelId?: string, extra?: string) => void;
+}) {
   const project = useStudio((s) => s.project)!;
   const page = useStudio((s) => s.page())!;
   const renamePage = useStudio((s) => s.renamePage);
@@ -345,22 +554,24 @@ function PagesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
         <Input value={page.name} onChange={(e) => renamePage(e.target.value)} maxLength={40} />
       </Field>
       <Field label="توضیح کمیک">
-        <Textarea value={project.description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+        <Textarea
+          value={project.description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+        />
       </Field>
       <div className="grid grid-cols-2 gap-2">
         <Field label="جهت خواندن">
-          <select
-            className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+          <Select
             value={project.readingDirection}
             onChange={(e) => setDirection(e.target.value as "rtl" | "ltr")}
           >
             <option value="rtl">راست به چپ</option>
             <option value="ltr">چپ به راست</option>
-          </select>
+          </Select>
         </Field>
         <Field label="اندازه صفحه">
-          <select
-            className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+          <Select
             value={sizeId}
             onChange={(e) => {
               const s = PAGE_SIZES.find((x) => x.id === e.target.value);
@@ -373,11 +584,11 @@ function PagesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
               </option>
             ))}
             {sizeId === "custom" && <option value="custom">سفارشی</option>}
-          </select>
+          </Select>
         </Field>
       </div>
 
-      <section className="rounded-lg bg-elevated p-3">
+      <section className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
         <PageBackgroundPicker onPickImage={() => onPickFiles("image", undefined, "bg")} />
         {page.background.assetId && (
           <div className="mt-2 space-y-2">
@@ -420,46 +631,47 @@ function PagesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
 
       <AudioEditor onPickFiles={onPickFiles} />
 
-      <details className="rounded-lg bg-elevated p-3">
-        <summary className="cursor-pointer text-xs font-semibold">تنظیمات پیشرفته صفحه</summary>
+      <details className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold marker:hidden">
+          تنظیمات پیشرفته صفحه
+        </summary>
         <div className="mt-3 space-y-2">
-        <label className="mb-2 flex items-center justify-between gap-2 text-sm">
-          قفل کارگردان
-          <Switch
-            checked={page.playback.directorLock}
-            onCheckedChange={(v) =>
+          <label className="mb-2 flex items-center justify-between gap-2 text-sm">
+            قفل کارگردان
+            <Switch
+              checked={page.playback.directorLock}
+              onCheckedChange={(v) =>
+                touchPage((p) => {
+                  p.playback.directorLock = v;
+                }, false)
+              }
+            />
+          </label>
+          <Range
+            label="زمان پیش‌فرض قاب (ثانیه)"
+            value={page.playback.defaultDelayMs / 1000}
+            min={0.5}
+            max={12}
+            step={0.1}
+            onChange={(v) =>
               touchPage((p) => {
-                p.playback.directorLock = v;
+                p.playback.defaultDelayMs = Math.round(v * 1000);
               }, false)
             }
           />
-        </label>
-        <Range
-          label="زمان پیش‌فرض قاب (ثانیه)"
-          value={page.playback.defaultDelayMs / 1000}
-          min={0.5}
-          max={12}
-          step={0.1}
-          onChange={(v) =>
-            touchPage((p) => {
-              p.playback.defaultDelayMs = Math.round(v * 1000);
-            }, false)
-          }
-        />
-        <Field label="نمایش پیش‌فرض">
-          <select
-            className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
-            value={page.playback.defaultReveal}
-            onChange={(e) =>
-              touchPage((p) => {
-                p.playback.defaultReveal = e.target.value as "click" | "auto";
-              }, false)
-            }
-          >
-            <option value="click">با لمس</option>
-            <option value="auto">خودکار</option>
-          </select>
-        </Field>
+          <Field label="نمایش پیش‌فرض">
+            <Select
+              value={page.playback.defaultReveal}
+              onChange={(e) =>
+                touchPage((p) => {
+                  p.playback.defaultReveal = e.target.value as "click" | "auto";
+                }, false)
+              }
+            >
+              <option value="click">با لمس</option>
+              <option value="auto">خودکار</option>
+            </Select>
+          </Field>
         </div>
       </details>
 
@@ -475,7 +687,11 @@ function PagesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
   );
 }
 
-export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "audio", panelId?: string, extra?: string) => void }) {
+export function AudioEditor({
+  onPickFiles,
+}: {
+  onPickFiles: (kind: "image" | "video" | "audio", panelId?: string, extra?: string) => void;
+}) {
   const page = useStudio((s) => s.page());
   const pageIndex = useStudio((s) => s.pageIndex);
   const pages = useStudio((s) => s.project?.pages ?? []);
@@ -486,7 +702,11 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
   const [listening, setListening] = useState(false);
   if (!page) return <p className="text-sm text-muted">صفحه‌ای باز نیست.</p>;
   const clip = page.playback.ambientAudio;
-  const panelStory = selected && (selected.type === "panel" || selected.type === "image" || selected.type === "video") ? selected.story : null;
+  const panelStory =
+    selected &&
+    (selected.type === "panel" || selected.type === "image" || selected.type === "video")
+      ? selected.story
+      : null;
   const audios = assets.filter((a) => a.kind === "audio");
   const clipMeta = clip ? assets.find((a) => a.id === clip.assetId) : null;
 
@@ -497,9 +717,11 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
 
   return (
     <div className="space-y-4">
-      <section className="rounded-lg bg-elevated p-3">
+      <section className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
         <div className="mb-2 text-xs font-semibold">موسیقی پس‌زمینه</div>
-        <p className="mb-2 text-[11px] text-muted">فایل بگذار، بعد روی خط راست کنار صفحات دستگیره را بکش؛ تا همان صفحه پخش می‌شود.</p>
+        <p className="mb-2 text-[11px] text-muted">
+          فایل بگذار، بعد روی خط راست کنار صفحات دستگیره را بکش؛ تا همان صفحه پخش می‌شود.
+        </p>
         <div className="flex flex-wrap gap-1.5">
           <Button variant="outline" size="sm" onClick={() => onPickFiles("audio")}>
             فایل از دستگاه
@@ -545,11 +767,17 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
             {clipMeta && <p className="truncate text-xs text-muted">{clipMeta.name}</p>}
             <div>
               <div className="mb-1.5 text-xs font-semibold">پخش تا کدام صفحه؟</div>
-              <p className="mb-2 text-[11px] text-muted">همین موسیقی تا صفحه انتخاب‌شده ادامه پیدا می‌کند.</p>
+              <p className="mb-2 text-[11px] text-muted">
+                همین موسیقی تا صفحه انتخاب‌شده ادامه پیدا می‌کند.
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  className={`h-11 rounded-md px-3 text-sm ${!clip.throughPage || clip.throughPage === 0 ? "bg-select/30 text-select-fg" : "bg-bg"}`}
+                  className={`tap h-11 rounded-full px-4 text-sm ${
+                    !clip.throughPage || clip.throughPage === 0
+                      ? "bg-brand text-brand-fg"
+                      : "bg-bg text-fg shadow-[var(--shadow-border)]"
+                  }`}
                   onClick={() =>
                     touchPage((p) => {
                       if (!p.playback.ambientAudio) return;
@@ -565,7 +793,11 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
                     <button
                       key={i}
                       type="button"
-                      className={`h-11 min-w-11 rounded-md px-3 text-sm ${clip.throughPage === i + 1 ? "bg-select/30 text-select-fg" : "bg-bg"}`}
+                      className={`tap h-11 min-w-11 rounded-full px-4 text-sm ${
+                        clip.throughPage === i + 1
+                          ? "bg-brand text-brand-fg"
+                          : "bg-bg text-fg shadow-[var(--shadow-border)]"
+                      }`}
                       onClick={() =>
                         touchPage((p) => {
                           if (!p.playback.ambientAudio) return;
@@ -580,7 +812,11 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
                 )}
                 <button
                   type="button"
-                  className={`h-11 rounded-md px-3 text-sm ${clip.throughPage === -1 || clip.continuePages ? "bg-select/30 text-select-fg" : "bg-bg"}`}
+                  className={`tap h-11 rounded-full px-4 text-sm ${
+                    clip.throughPage === -1 || clip.continuePages
+                      ? "bg-brand text-brand-fg"
+                      : "bg-bg text-fg shadow-[var(--shadow-border)]"
+                  }`}
                   onClick={() =>
                     touchPage((p) => {
                       if (!p.playback.ambientAudio) return;
@@ -604,58 +840,64 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
                 }, false)
               }
             />
-            <p className="text-[11px] text-muted">تا کجا پخش شود را از خط راست کنار صفحات بکش. ثانیه‌ها لازم نیست.</p>
+            <p className="text-[11px] text-muted">
+              تا کجا پخش شود را از خط راست کنار صفحات بکش. ثانیه‌ها لازم نیست.
+            </p>
             <details className="rounded-md bg-bg p-2">
-              <summary className="cursor-pointer text-xs text-muted">تنظیمات پیشرفته صدا</summary>
+              <summary className="flex cursor-pointer list-none items-center justify-between text-xs text-muted marker:hidden">
+                تنظیمات پیشرفته صدا
+              </summary>
               <div className="mt-2 space-y-2">
-            <Range
-              label="شروع (ثانیه)"
-              value={clip.start}
-              min={0}
-              max={120}
-              step={0.1}
-              onChange={(v) =>
-                touchPage((p) => {
-                  if (p.playback.ambientAudio) p.playback.ambientAudio.start = v;
-                }, false)
-              }
-            />
-            <Range
-              label="پایان (۰ = تا آخر)"
-              value={clip.end}
-              min={0}
-              max={180}
-              step={0.1}
-              onChange={(v) =>
-                touchPage((p) => {
-                  if (p.playback.ambientAudio) p.playback.ambientAudio.end = v;
-                }, false)
-              }
-            />
-            <Range
-              label="محو ورود (ثانیه)"
-              value={clip.fadeInMs / 1000}
-              min={0}
-              max={4}
-              step={0.05}
-              onChange={(v) =>
-                touchPage((p) => {
-                  if (p.playback.ambientAudio) p.playback.ambientAudio.fadeInMs = Math.round(v * 1000);
-                }, false)
-              }
-            />
-            <Range
-              label="محو خروج (ثانیه)"
-              value={clip.fadeOutMs / 1000}
-              min={0}
-              max={4}
-              step={0.05}
-              onChange={(v) =>
-                touchPage((p) => {
-                  if (p.playback.ambientAudio) p.playback.ambientAudio.fadeOutMs = Math.round(v * 1000);
-                }, false)
-              }
-            />
+                <Range
+                  label="شروع (ثانیه)"
+                  value={clip.start}
+                  min={0}
+                  max={120}
+                  step={0.1}
+                  onChange={(v) =>
+                    touchPage((p) => {
+                      if (p.playback.ambientAudio) p.playback.ambientAudio.start = v;
+                    }, false)
+                  }
+                />
+                <Range
+                  label="پایان (۰ = تا آخر)"
+                  value={clip.end}
+                  min={0}
+                  max={180}
+                  step={0.1}
+                  onChange={(v) =>
+                    touchPage((p) => {
+                      if (p.playback.ambientAudio) p.playback.ambientAudio.end = v;
+                    }, false)
+                  }
+                />
+                <Range
+                  label="محو ورود (ثانیه)"
+                  value={clip.fadeInMs / 1000}
+                  min={0}
+                  max={4}
+                  step={0.05}
+                  onChange={(v) =>
+                    touchPage((p) => {
+                      if (p.playback.ambientAudio)
+                        p.playback.ambientAudio.fadeInMs = Math.round(v * 1000);
+                    }, false)
+                  }
+                />
+                <Range
+                  label="محو خروج (ثانیه)"
+                  value={clip.fadeOutMs / 1000}
+                  min={0}
+                  max={4}
+                  step={0.05}
+                  onChange={(v) =>
+                    touchPage((p) => {
+                      if (p.playback.ambientAudio)
+                        p.playback.ambientAudio.fadeOutMs = Math.round(v * 1000);
+                    }, false)
+                  }
+                />
               </div>
             </details>
             <label className="flex items-center justify-between gap-2 text-sm">
@@ -682,22 +924,31 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
                 <button
                   key={a.id}
                   type="button"
-                  className="flex min-h-11 items-center justify-between rounded-md bg-bg px-3 text-start text-sm"
+                  className="tap flex min-h-11 items-center justify-between rounded-lg bg-bg px-3 text-start text-sm shadow-[var(--shadow-border)] hover:bg-overlay"
                   onClick={() => useStudio.getState().placeAsset(a.id)}
                 >
                   <span className="truncate">{a.name}</span>
-                  {a.duration ? <span className="ms-2 shrink-0 font-mono text-[11px] text-muted">{a.duration.toFixed(0)}ث</span> : null}
+                  {a.duration ? (
+                    <span className="ms-2 shrink-0 font-mono text-[11px] text-muted">
+                      {a.duration.toFixed(0)}ث
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
           </div>
         )}
       </section>
-      <section className="rounded-lg bg-elevated p-3">
+      <section className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
         <div className="mb-2 text-xs font-semibold">صدای قاب انتخاب‌شده</div>
         <p className="mb-2 text-xs text-muted">یک قاب یا تصویر را انتخاب کن، بعد فایل صدا بگذار.</p>
         <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" onClick={() => onPickFiles("audio", undefined, "panel-audio")} disabled={!selected}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPickFiles("audio", undefined, "panel-audio")}
+            disabled={!selected}
+          >
             صدای این قاب
           </Button>
           {panelStory?.audio && (
@@ -706,7 +957,13 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
               size="sm"
               onClick={() => {
                 if (!selected) return;
-                useStudio.getState().patchItem(selected.id, { story: { ...panelStory, audio: null } } as Partial<ComicItem>, true);
+                useStudio
+                  .getState()
+                  .patchItem(
+                    selected.id,
+                    { story: { ...panelStory, audio: null } } as Partial<ComicItem>,
+                    true,
+                  );
               }}
             >
               حذف صدای قاب
@@ -718,7 +975,11 @@ export function AudioEditor({ onPickFiles }: { onPickFiles: (kind: "image" | "vi
   );
 }
 
-function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "audio", panelId?: string) => void }) {
+function FramesPane({
+  onPickFiles,
+}: {
+  onPickFiles: (kind: "image" | "video" | "audio", panelId?: string) => void;
+}) {
   const addShape = useStudio((s) => s.addShape);
   const setTool = useStudio((s) => s.setTool);
   const tool = useStudio((s) => s.tool);
@@ -728,14 +989,20 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
   const assets = useStudio((s) => s.assets);
   const fillEmptyPanels = useStudio((s) => s.fillEmptyPanels);
 
-  const frame = selected && (selected.type === "panel" || selected.type === "image" || selected.type === "shape") ? selected : null;
+  const frame =
+    selected &&
+    (selected.type === "panel" || selected.type === "image" || selected.type === "shape")
+      ? selected
+      : null;
 
   return (
     <div className="space-y-4">
       <div>
         <div className="mb-2 text-xs font-semibold">چیدمان قاب‌ها</div>
         <LayoutGrid />
-        <p className="mt-1 text-[11px] text-muted">چیدمان تازه قاب‌های قبلی را جایگزین می‌کند؛ حباب‌ها می‌مانند.</p>
+        <p className="mt-1 text-[11px] text-muted">
+          چیدمان تازه قاب‌های قبلی را جایگزین می‌کند؛ حباب‌ها می‌مانند.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -751,7 +1018,7 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
         </Button>
       </div>
 
-      <div className="rounded-lg bg-elevated p-3">
+      <div className="rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
         <div className="mb-2 text-xs font-semibold">شکل و قلم</div>
         <div className="flex flex-wrap gap-1.5">
           <Button variant="outline" size="sm" onClick={() => addShape("rect")}>
@@ -766,7 +1033,11 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
           <Button variant="outline" size="sm" onClick={() => addShape("arrow")}>
             پیکان
           </Button>
-          <Button variant={tool === "draw" ? "steel" : "outline"} size="sm" onClick={() => setTool(tool === "draw" ? "select" : "draw")}>
+          <Button
+            variant={tool === "draw" ? "steel" : "outline"}
+            size="sm"
+            onClick={() => setTool(tool === "draw" ? "select" : "draw")}
+          >
             قلم آزاد
           </Button>
         </div>
@@ -777,7 +1048,7 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
       </div>
 
       {frame && frame.type !== "shape" && (
-        <div className="space-y-2 rounded-lg bg-elevated p-3">
+        <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
           <div className="text-xs font-semibold">ظاهر قاب</div>
           {"stroke" in frame && (
             <Range
@@ -803,7 +1074,13 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
                 <input
                   type="color"
                   value={frame.strokeColor}
-                  onChange={(e) => patchItem(frame.id, { strokeColor: e.target.value } as Partial<ComicItem>, false)}
+                  onChange={(e) =>
+                    patchItem(
+                      frame.id,
+                      { strokeColor: e.target.value } as Partial<ComicItem>,
+                      false,
+                    )
+                  }
                   className="h-11 w-full"
                 />
               </Field>
@@ -813,7 +1090,9 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
                 <input
                   type="color"
                   value={frame.fill}
-                  onChange={(e) => patchItem(frame.id, { fill: e.target.value } as Partial<ComicItem>, false)}
+                  onChange={(e) =>
+                    patchItem(frame.id, { fill: e.target.value } as Partial<ComicItem>, false)
+                  }
                   className="h-11 w-full"
                 />
               </Field>
@@ -822,10 +1101,12 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
         </div>
       )}
 
-      {selected && (selected.type === "image" || selected.type === "video") && <MediaCrop item={selected} />}
-      {selected && (selected.type === "panel" || selected.type === "image" || selected.type === "video") && selected.story && (
-        <PanelStoryCard item={selected} onPickFiles={onPickFiles} />
+      {selected && (selected.type === "image" || selected.type === "video") && (
+        <MediaCrop item={selected} />
       )}
+      {selected &&
+        (selected.type === "panel" || selected.type === "image" || selected.type === "video") &&
+        selected.story && <PanelStoryCard item={selected} onPickFiles={onPickFiles} />}
     </div>
   );
 }
@@ -833,34 +1114,95 @@ function FramesPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "
 function MediaCrop({ item }: { item: Extract<ComicItem, { type: "image" | "video" }> }) {
   const patchItem = useStudio((s) => s.patchItem);
   return (
-    <div className="space-y-2 rounded-lg bg-elevated p-3">
+    <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
       <div className="text-xs font-semibold">تنظیم داخل قاب</div>
-      <p className="text-[11px] text-muted">کشیدن روی بوم جایش را عوض می‌کند. گوشه‌ها یا دو انگشت اندازه را عوض می‌کند.</p>
-      <Range label="بزرگ‌نمایی" value={Math.round(item.zoom * 100)} min={50} max={400} onChange={(v) => patchItem(item.id, { zoom: v / 100 } as Partial<ComicItem>, false)} />
+      <p className="text-[11px] text-muted">
+        کشیدن روی بوم جایش را عوض می‌کند. گوشه‌ها یا دو انگشت اندازه را عوض می‌کند.
+      </p>
+      <Range
+        label="بزرگ‌نمایی"
+        value={Math.round(item.zoom * 100)}
+        min={50}
+        max={400}
+        onChange={(v) => patchItem(item.id, { zoom: v / 100 } as Partial<ComicItem>, false)}
+      />
       <div className="grid grid-cols-2 gap-1.5">
-        <Button variant="outline" size="sm" onClick={() => useStudio.getState().scaleSelectedMedia(1 / 1.22)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => useStudio.getState().scaleSelectedMedia(1 / 1.22)}
+        >
           کوچک‌تر
         </Button>
-        <Button variant="outline" size="sm" onClick={() => useStudio.getState().scaleSelectedMedia(1.22)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => useStudio.getState().scaleSelectedMedia(1.22)}
+        >
           بزرگ‌تر
         </Button>
       </div>
-      <Button variant="outline" size="sm" className="w-full" onClick={() => useStudio.getState().toggleMediaFree()}>
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => useStudio.getState().toggleMediaFree()}
+      >
         {item.free || !item.panelId ? "چسباندن به قاب" : "جدا کردن از قاب — روی صفحه"}
       </Button>
-      <Range label="افقی" value={Math.round(item.cropX * 100)} min={-100} max={100} onChange={(v) => patchItem(item.id, { cropX: v / 100 } as Partial<ComicItem>, false)} />
-      <Range label="عمودی" value={Math.round(item.cropY * 100)} min={-100} max={100} onChange={(v) => patchItem(item.id, { cropY: v / 100 } as Partial<ComicItem>, false)} />
+      <Range
+        label="افقی"
+        value={Math.round(item.cropX * 100)}
+        min={-100}
+        max={100}
+        onChange={(v) => patchItem(item.id, { cropX: v / 100 } as Partial<ComicItem>, false)}
+      />
+      <Range
+        label="عمودی"
+        value={Math.round(item.cropY * 100)}
+        min={-100}
+        max={100}
+        onChange={(v) => patchItem(item.id, { cropY: v / 100 } as Partial<ComicItem>, false)}
+      />
       <div className="flex flex-wrap gap-1.5">
-        <Button variant="outline" size="sm" onClick={() => patchItem(item.id, { flipX: !item.flipX } as Partial<ComicItem>, true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => patchItem(item.id, { flipX: !item.flipX } as Partial<ComicItem>, true)}
+        >
           <FlipHorizontal /> افقی
         </Button>
-        <Button variant="outline" size="sm" onClick={() => patchItem(item.id, { flipY: !item.flipY } as Partial<ComicItem>, true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => patchItem(item.id, { flipY: !item.flipY } as Partial<ComicItem>, true)}
+        >
           <FlipVertical /> عمودی
         </Button>
-        <Button variant="outline" size="sm" onClick={() => patchItem(item.id, { fitMode: "fit", zoom: 1, cropX: 0, cropY: 0 } as Partial<ComicItem>, true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            patchItem(
+              item.id,
+              { fitMode: "fit", zoom: 1, cropX: 0, cropY: 0 } as Partial<ComicItem>,
+              true,
+            )
+          }
+        >
           کامل دیده شود
         </Button>
-        <Button variant="outline" size="sm" onClick={() => patchItem(item.id, { fitMode: "fill", zoom: 1, cropX: 0, cropY: 0 } as Partial<ComicItem>, true)}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            patchItem(
+              item.id,
+              { fitMode: "fill", zoom: 1, cropX: 0, cropY: 0 } as Partial<ComicItem>,
+              true,
+            )
+          }
+        >
           پرکردن قاب
         </Button>
       </div>
@@ -879,7 +1221,7 @@ function PanelStoryCard({
   const story = "story" in item ? item.story : null;
   if (!story) return null;
   return (
-    <div className="space-y-2 rounded-lg bg-elevated p-3">
+    <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
       <div className="text-xs font-semibold">نمایش این قاب در خواندن</div>
       <div className="grid grid-cols-3 gap-2">
         <Field label="نوبت">
@@ -888,18 +1230,31 @@ function PanelStoryCard({
             min={1}
             max={99}
             value={story.order}
-            onChange={(e) => patchItem(item.id, { story: { ...story, order: Number(e.target.value) } } as Partial<ComicItem>, false)}
+            onChange={(e) =>
+              patchItem(
+                item.id,
+                { story: { ...story, order: Number(e.target.value) } } as Partial<ComicItem>,
+                false,
+              )
+            }
           />
         </Field>
         <Field label="روش">
-          <select
-            className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+          <Select
             value={story.reveal}
-            onChange={(e) => patchItem(item.id, { story: { ...story, reveal: e.target.value as "click" | "auto" } } as Partial<ComicItem>, false)}
+            onChange={(e) =>
+              patchItem(
+                item.id,
+                {
+                  story: { ...story, reveal: e.target.value as "click" | "auto" },
+                } as Partial<ComicItem>,
+                false,
+              )
+            }
           >
             <option value="click">لمس</option>
             <option value="auto">خودکار</option>
-          </select>
+          </Select>
         </Field>
         <Field label="ثانیه">
           <Input
@@ -907,21 +1262,33 @@ function PanelStoryCard({
             step={0.1}
             value={story.delayMs / 1000}
             onChange={(e) =>
-              patchItem(item.id, { story: { ...story, delayMs: Math.round(Number(e.target.value) * 1000) } } as Partial<ComicItem>, false)
+              patchItem(
+                item.id,
+                {
+                  story: { ...story, delayMs: Math.round(Number(e.target.value) * 1000) },
+                } as Partial<ComicItem>,
+                false,
+              )
             }
           />
         </Field>
       </div>
       <div className="pt-1 text-xs font-semibold">صدای همین قاب</div>
       <div className="flex gap-1.5">
-        <Button variant="outline" size="sm" onClick={() => onPickFiles("audio", undefined, "panel-audio")}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPickFiles("audio", undefined, "panel-audio")}
+        >
           فایل صدا
         </Button>
         {story.audio && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => patchItem(item.id, { story: { ...story, audio: null } } as Partial<ComicItem>, true)}
+            onClick={() =>
+              patchItem(item.id, { story: { ...story, audio: null } } as Partial<ComicItem>, true)
+            }
           >
             حذف صدا
           </Button>
@@ -931,7 +1298,11 @@ function PanelStoryCard({
   );
 }
 
-function MediaPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "audio", panelId?: string) => void }) {
+function MediaPane({
+  onPickFiles,
+}: {
+  onPickFiles: (kind: "image" | "video" | "audio", panelId?: string) => void;
+}) {
   const selected = useStudio((s) => s.selected());
   const assets = useStudio((s) => s.assets);
   const deleteSelected = useStudio((s) => s.deleteSelected);
@@ -953,7 +1324,13 @@ function MediaPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
         )}
       </div>
 
-      {video ? <VideoEditor item={video} /> : <p className="text-sm text-muted">یک قاب را انتخاب کن و ویدئو یا تصویر اضافه کن. ویدئو داخل همان قاب برش و زمان‌بندی می‌شود.</p>}
+      {video ? (
+        <VideoEditor item={video} />
+      ) : (
+        <p className="text-sm text-muted">
+          یک قاب را انتخاب کن و ویدئو یا تصویر اضافه کن. ویدئو داخل همان قاب برش و زمان‌بندی می‌شود.
+        </p>
+      )}
 
       {assets.length > 0 && (
         <div>
@@ -963,7 +1340,7 @@ function MediaPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
               <button
                 key={a.id}
                 type="button"
-                className="aspect-square overflow-hidden rounded-md bg-elevated"
+                className="tap aspect-square overflow-hidden rounded-lg bg-elevated shadow-[var(--shadow-border)]"
                 onClick={() => {
                   useStudio.getState().placeAsset(a.id);
                 }}
@@ -972,7 +1349,9 @@ function MediaPane({ onPickFiles }: { onPickFiles: (kind: "image" | "video" | "a
                 {a.kind === "image" && thumbUrl(a.id) ? (
                   <img src={thumbUrl(a.id)} alt="" className="size-full object-cover" />
                 ) : (
-                  <span className="grid size-full place-items-center text-[10px] text-muted">{a.kind}</span>
+                  <span className="grid size-full place-items-center text-[10px] text-muted">
+                    {a.kind}
+                  </span>
                 )}
               </button>
             ))}
@@ -993,7 +1372,7 @@ function VideoEditor({ item }: { item: VideoItem }) {
   const end = item.trimEnd > 0 ? item.trimEnd : dur || 1;
 
   return (
-    <div className="space-y-2 rounded-lg bg-elevated p-3">
+    <div className="space-y-2.5 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
       <div className="flex items-center justify-between gap-2 text-sm">
         <strong className="truncate">{item.name || "ویدئو"}</strong>
         <span className="font-mono text-xs text-muted">{dur.toFixed(1)} ث</span>
@@ -1062,17 +1441,18 @@ function VideoEditor({ item }: { item: VideoItem }) {
         </Field>
       </div>
       <Field label="سرعت">
-        <select
-          className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+        <Select
           value={item.speed}
-          onChange={(e) => patchItem(item.id, { speed: Number(e.target.value) } as Partial<ComicItem>, false)}
+          onChange={(e) =>
+            patchItem(item.id, { speed: Number(e.target.value) } as Partial<ComicItem>, false)
+          }
         >
           {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map((s) => (
             <option key={s} value={s}>
               {s}×
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Range
         label="صدای ویدئو"
@@ -1083,11 +1463,19 @@ function VideoEditor({ item }: { item: VideoItem }) {
       />
       <label className="flex items-center justify-between text-sm">
         بی‌صدا
-        <Switch checked={item.muted} onCheckedChange={(v) => patchItem(item.id, { muted: v } as Partial<ComicItem>, false)} />
+        <Switch
+          checked={item.muted}
+          onCheckedChange={(v) => patchItem(item.id, { muted: v } as Partial<ComicItem>, false)}
+        />
       </label>
       <label className="flex items-center justify-between text-sm">
         حفظ نسبت تصویر
-        <Switch checked={item.aspectLock} onCheckedChange={(v) => patchItem(item.id, { aspectLock: v } as Partial<ComicItem>, false)} />
+        <Switch
+          checked={item.aspectLock}
+          onCheckedChange={(v) =>
+            patchItem(item.id, { aspectLock: v } as Partial<ComicItem>, false)
+          }
+        />
       </label>
     </div>
   );
@@ -1109,7 +1497,8 @@ function BubblesPane() {
   const selected = useStudio((s) => s.selected());
   const patchItem = useStudio((s) => s.patchItem);
   const deleteSelected = useStudio((s) => s.deleteSelected);
-  const bubble = selected && (selected.type === "bubble" || selected.type === "text") ? selected : null;
+  const bubble =
+    selected && (selected.type === "bubble" || selected.type === "text") ? selected : null;
 
   return (
     <div className="space-y-3">
@@ -1124,29 +1513,34 @@ function BubblesPane() {
         </Button>
       </div>
       {!bubble ? (
-        <p className="text-sm text-muted">یک شکل را بزن تا حباب ساخته شود؛ بعد روی بوم دو بار بزن و بنویس. نوک سبز را بکش.</p>
+        <p className="text-sm text-muted">
+          یک شکل را بزن تا حباب ساخته شود؛ بعد روی بوم دو بار بزن و بنویس. نوک سبز را بکش.
+        </p>
       ) : (
         <>
           <Field label="متن">
             <Textarea
               rows={3}
               value={bubble.text}
-              onChange={(e) => patchItem(bubble.id, { text: e.target.value } as Partial<ComicItem>, false)}
+              onChange={(e) =>
+                patchItem(bubble.id, { text: e.target.value } as Partial<ComicItem>, false)
+              }
             />
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="فونت">
-              <select
-                className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+              <Select
                 value={bubble.fontFamily}
-                onChange={(e) => patchItem(bubble.id, { fontFamily: e.target.value } as Partial<ComicItem>, false)}
+                onChange={(e) =>
+                  patchItem(bubble.id, { fontFamily: e.target.value } as Partial<ComicItem>, false)
+                }
               >
                 {COMIC_FONTS.map((f) => (
                   <option key={f.v} value={f.v}>
                     {f.n}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Range
               label="اندازه"
@@ -1157,39 +1551,91 @@ function BubblesPane() {
             />
           </div>
           <div className="flex gap-1">
-            <Toggle on={!!bubble.bold} onClick={() => patchItem(bubble.id, { bold: !bubble.bold } as Partial<ComicItem>, false)}>
+            <Toggle
+              on={!!bubble.bold}
+              onClick={() =>
+                patchItem(bubble.id, { bold: !bubble.bold } as Partial<ComicItem>, false)
+              }
+            >
               B
             </Toggle>
-            <Toggle on={!!bubble.italic} onClick={() => patchItem(bubble.id, { italic: !bubble.italic } as Partial<ComicItem>, false)}>
+            <Toggle
+              on={!!bubble.italic}
+              onClick={() =>
+                patchItem(bubble.id, { italic: !bubble.italic } as Partial<ComicItem>, false)
+              }
+            >
               I
             </Toggle>
             {(["right", "center", "left"] as const).map((a) => (
-              <Toggle key={a} on={bubble.align === a} onClick={() => patchItem(bubble.id, { align: a } as Partial<ComicItem>, false)}>
+              <Toggle
+                key={a}
+                on={bubble.align === a}
+                onClick={() => patchItem(bubble.id, { align: a } as Partial<ComicItem>, false)}
+              >
                 {a === "right" ? "راست" : a === "center" ? "وسط" : "چپ"}
               </Toggle>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Field label="رنگ متن">
-              <input type="color" value={bubble.color} onChange={(e) => patchItem(bubble.id, { color: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+              <input
+                type="color"
+                value={bubble.color}
+                onChange={(e) =>
+                  patchItem(bubble.id, { color: e.target.value } as Partial<ComicItem>, false)
+                }
+                className="h-11 w-full"
+              />
             </Field>
             {bubble.type === "bubble" && (
               <Field label="رنگ حباب">
-                <input type="color" value={bubble.fill} onChange={(e) => patchItem(bubble.id, { fill: e.target.value } as Partial<ComicItem>, false)} className="h-11 w-full" />
+                <input
+                  type="color"
+                  value={bubble.fill}
+                  onChange={(e) =>
+                    patchItem(bubble.id, { fill: e.target.value } as Partial<ComicItem>, false)
+                  }
+                  className="h-11 w-full"
+                />
               </Field>
             )}
           </div>
           {bubble.type === "bubble" && (
             <>
-              <Range label="ضخامت خط" value={bubble.stroke} min={0} max={20} onChange={(v) => patchItem(bubble.id, { stroke: v } as Partial<ComicItem>, false)} />
-              <Range label="گردی" value={bubble.radius} min={0} max={80} onChange={(v) => patchItem(bubble.id, { radius: v } as Partial<ComicItem>, false)} />
-              <Range label="طول دنباله" value={bubble.tail} min={20} max={240} onChange={(v) => patchItem(bubble.id, { tail: v } as Partial<ComicItem>, false)} />
+              <Range
+                label="ضخامت خط"
+                value={bubble.stroke}
+                min={0}
+                max={20}
+                onChange={(v) => patchItem(bubble.id, { stroke: v } as Partial<ComicItem>, false)}
+              />
+              <Range
+                label="گردی"
+                value={bubble.radius}
+                min={0}
+                max={80}
+                onChange={(v) => patchItem(bubble.id, { radius: v } as Partial<ComicItem>, false)}
+              />
+              <Range
+                label="طول دنباله"
+                value={bubble.tail}
+                min={20}
+                max={240}
+                onChange={(v) => patchItem(bubble.id, { tail: v } as Partial<ComicItem>, false)}
+              />
               <div className="rounded-lg bg-bg p-2">
                 <label className="flex items-center justify-between text-sm">
                   حباب زنده (کلمه به کلمه)
                   <Switch
                     checked={bubble.timing.enabled}
-                    onCheckedChange={(v) => patchItem(bubble.id, { timing: { ...bubble.timing, enabled: v } } as Partial<ComicItem>, false)}
+                    onCheckedChange={(v) =>
+                      patchItem(
+                        bubble.id,
+                        { timing: { ...bubble.timing, enabled: v } } as Partial<ComicItem>,
+                        false,
+                      )
+                    }
                   />
                 </label>
                 {bubble.timing.enabled && (
@@ -1200,7 +1646,13 @@ function BubblesPane() {
                         step={0.1}
                         value={bubble.timing.startMs / 1000}
                         onChange={(e) =>
-                          patchItem(bubble.id, { timing: { ...bubble.timing, startMs: Number(e.target.value) * 1000 } } as Partial<ComicItem>, false)
+                          patchItem(
+                            bubble.id,
+                            {
+                              timing: { ...bubble.timing, startMs: Number(e.target.value) * 1000 },
+                            } as Partial<ComicItem>,
+                            false,
+                          )
                         }
                       />
                     </Field>
@@ -1210,7 +1662,13 @@ function BubblesPane() {
                         step={0.1}
                         value={bubble.timing.endMs / 1000}
                         onChange={(e) =>
-                          patchItem(bubble.id, { timing: { ...bubble.timing, endMs: Number(e.target.value) * 1000 } } as Partial<ComicItem>, false)
+                          patchItem(
+                            bubble.id,
+                            {
+                              timing: { ...bubble.timing, endMs: Number(e.target.value) * 1000 },
+                            } as Partial<ComicItem>,
+                            false,
+                          )
                         }
                       />
                     </Field>
@@ -1237,26 +1695,55 @@ function LayersPane() {
   if (!page) return null;
   const items = [...page.items].reverse();
   return (
-    <div className="space-y-1">
-      <p className="mb-2 text-[11px] text-muted">بالاترین لایه روی بقیه کشیده می‌شود. برای جابه‌جایی از دکمه‌ها استفاده کن.</p>
+    <div className="space-y-1.5">
+      <p className="mb-2 text-[11px] leading-relaxed text-muted">
+        بالاترین لایه روی بقیه کشیده می‌شود. با فلش‌ها جابه‌جایش کن.
+      </p>
       {items.map((it, vis) => {
         const real = page.items.length - 1 - vis;
+        const active = selectedId === it.id;
         return (
           <div
             key={it.id}
-            className={`flex min-h-11 items-center gap-2 rounded-md px-2 ${selectedId === it.id ? "bg-select/25" : "bg-elevated"}`}
+            className={`flex min-h-12 items-center gap-1 rounded-lg px-1.5 transition-colors ${
+              active
+                ? "bg-brand/12 shadow-[0_0_0_1px_var(--color-brand)]"
+                : "bg-elevated shadow-[var(--shadow-border)]"
+            } ${it.hidden ? "opacity-55" : ""}`}
           >
-            <button type="button" className="min-w-0 flex-1 truncate text-start text-sm" onClick={() => select(it.id)}>
-              {itemLabel(it)}
+            <button
+              type="button"
+              className="tap flex min-w-0 flex-1 items-center gap-2 px-1.5 py-2 text-start text-sm"
+              onClick={() => select(it.id)}
+            >
+              <span className="num w-5 shrink-0 text-[10px] text-subtle">{vis + 1}</span>
+              <span className={`truncate ${active ? "font-medium text-brand" : ""}`}>
+                {itemLabel(it)}
+              </span>
             </button>
-            <button type="button" className="min-h-11 min-w-11 text-xs text-muted" onClick={() => toggleHidden(it.id)}>
-              {it.hidden ? "نمایش" : "پنهان"}
+            <button
+              type="button"
+              aria-label={it.hidden ? "نمایش لایه" : "پنهان‌کردن لایه"}
+              className="tap grid size-9 place-items-center rounded-md text-muted hover:bg-bg hover:text-fg"
+              onClick={() => toggleHidden(it.id)}
+            >
+              {it.hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
-            <button type="button" className="min-h-11 min-w-11 text-xs" onClick={() => reorderLayer(real, Math.min(page.items.length - 1, real + 1))}>
-              بالا
+            <button
+              type="button"
+              aria-label="یک لایه بالاتر"
+              className="tap grid size-9 place-items-center rounded-md text-muted hover:bg-bg hover:text-fg"
+              onClick={() => reorderLayer(real, Math.min(page.items.length - 1, real + 1))}
+            >
+              <ArrowUp className="size-4" />
             </button>
-            <button type="button" className="min-h-11 min-w-11 text-xs" onClick={() => reorderLayer(real, Math.max(0, real - 1))}>
-              پایین
+            <button
+              type="button"
+              aria-label="یک لایه پایین‌تر"
+              className="tap grid size-9 place-items-center rounded-md text-muted hover:bg-bg hover:text-fg"
+              onClick={() => reorderLayer(real, Math.max(0, real - 1))}
+            >
+              <ArrowDown className="size-4" />
             </button>
           </div>
         );
@@ -1294,11 +1781,14 @@ function ExportPane({
         </Button>
       </div>
       <Button variant="secondary" className="w-full" onClick={() => void saveNow()}>
-        {saveStatus === "saving" ? "در حال ذخیره…" : saveStatus === "saved" ? "ذخیره شد" : "ذخیره کن"}
+        {saveStatus === "saving"
+          ? "در حال ذخیره…"
+          : saveStatus === "saved"
+            ? "ذخیره شد"
+            : "ذخیره کن"}
       </Button>
       <Field label="زبان پیش‌نمایش حباب‌ها">
-        <select
-          className="h-11 w-full rounded-md bg-bg px-2 text-sm shadow-[var(--shadow-border)]"
+        <Select
           value={previewLanguage}
           onChange={(e) => useStudio.setState({ previewLanguage: e.target.value })}
         >
@@ -1307,10 +1797,11 @@ function ExportPane({
               {n}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <p className="text-[11px] text-muted">
-        کمیک «{project.title}» فقط روی همین دستگاه است. برای ترجمه، متن جایگزین هر حباب را در تب حباب بنویس — تصویر جایش عوض نمی‌شود.
+        کمیک «{project.title}» فقط روی همین دستگاه است. برای ترجمه، متن جایگزین هر حباب را در تب
+        حباب بنویس — تصویر جایش عوض نمی‌شود.
       </p>
       <Button variant="ghost" size="sm" onClick={() => setTab("props")}>
         رفتن به ویژگی‌ها
@@ -1349,17 +1840,35 @@ function Range({
         <span>{label}</span>
         <b className="font-mono text-fg">{Number.isInteger(step) ? value : value.toFixed(1)}</b>
       </div>
-      <Slider min={min} max={max} step={step} value={[value]} onValueChange={([v]) => onChange(v)} />
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
+      />
     </div>
   );
 }
 
-function Toggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+function Toggle({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`h-9 min-w-11 rounded-md px-2 text-xs ${on ? "bg-select/30 text-select-fg" : "bg-elevated text-muted"}`}
+      className={`tap h-9 min-w-11 rounded-md px-2 text-xs font-medium ${
+        on
+          ? "bg-brand/15 text-brand shadow-[0_0_0_1px_var(--color-brand)]"
+          : "bg-elevated text-muted hover:text-fg"
+      }`}
     >
       {children}
     </button>

@@ -12,9 +12,12 @@ export function DropdownMenuContent({
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
-        sideOffset={6}
+        sideOffset={8}
+        collisionPadding={12}
         className={cn(
-          "z-50 min-w-44 overflow-hidden rounded-lg bg-elevated p-1 shadow-[var(--shadow-lift)]",
+          "material z-50 min-w-48 overflow-hidden rounded-lg bg-elevated p-1.5 shadow-[var(--shadow-lift)]",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
+          "data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1",
           className,
         )}
         {...props}
@@ -30,10 +33,31 @@ export function DropdownMenuItem({
   return (
     <DropdownMenuPrimitive.Item
       className={cn(
-        "flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-3 text-sm outline-none data-[highlighted]:bg-line/70",
+        "tap flex min-h-10 cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-sm text-fg outline-none",
+        "[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-subtle",
+        "data-[highlighted]:bg-overlay data-[highlighted]:[&_svg]:text-fg data-[disabled]:opacity-40",
         className,
       )}
       {...props}
     />
+  );
+}
+
+export function DropdownMenuLabel({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      className={cn("px-2.5 pb-1 pt-1.5 text-[11px] font-semibold text-subtle", className)}
+      {...props}
+    />
+  );
+}
+
+export function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<"div">) {
+  return <div className={cn("-mx-1.5 my-1 h-px bg-line", className)} {...props} />;
+}
+
+export function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<"span">) {
+  return (
+    <span dir="ltr" className={cn("num ms-auto text-[10px] text-subtle", className)} {...props} />
   );
 }

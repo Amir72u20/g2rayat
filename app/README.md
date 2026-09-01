@@ -18,6 +18,60 @@ Standalone Persian comic studio: create pages, place images/video, add speech bu
 - `src/lib/comic/draw.ts` — canvas renderer (editor + PNG export)
 - `src/lib/comic/package.ts` — `.kader.json` project package
 - `src/components/studio/` — Home, Editor, Reader shells
+- `src/components/ui/` — primitives (button, select, segmented, sheet, dialog…)
+- `src/styles.css` — design tokens, materials, platform behaviour
+- `src/lib/theme.ts` — dark / light / system theme, applied before first paint
+
+## Design system
+
+Everything visual comes from one token layer in `src/styles.css`; components
+never hard-code a colour, radius, shadow or easing.
+
+- **Palette** — an "ink & paper" set: a four-step elevation ladder
+  (`bg → surface → elevated → overlay`) plus hairline borders, with a single
+  vermilion accent (`--color-brand`) reserved for the one action a screen exists
+  for, selection state, and the canvas selection chrome. Cool cyan
+  (`--color-steel`) is kept for snap guides so guides never read as selection.
+- **Themes** — dark is the default; light is a warm newsprint theme, not an
+  inverted dark one. The choice (dark / light / system) lives in `localStorage`
+  and is applied by an inline script before first paint, so there is no flash
+  of the wrong theme. `<meta name="theme-color">` follows it.
+- **Materials** — `.material` (fill + hairline + a 1px top highlight),
+  `.halftone` (comic print dots), `.checker`, `.scrim-top/-bottom`, `.skeleton`
+  (shimmer, not a pulse). They live in `@layer components`, so Tailwind
+  utilities always win over them.
+- **Motion** — two easings (`--ease-out-quint` for UI, `--ease-spring` for
+  anything physical) and four durations. Cards rise on entry, sheets slide,
+  the segmented thumb travels. All of it collapses under
+  `prefers-reduced-motion`.
+- **Type** — Vazirmatn for UI, Lalezar for display headings and the wordmark,
+  IBM Plex Mono (via `.num`, tabular figures) for anything numeric.
+
+## Platform behaviour
+
+**Android / touch**
+
+- Every target is ≥ 44px; `touch-action: manipulation` kills the double-tap
+  zoom delay without blocking pinch, and the tap highlight is replaced by a
+  press-scale state (`.tap`).
+- `overscroll-behavior-y: none` stops pull-to-refresh behind the app shell;
+  sheets and scroll rails contain their own overscroll.
+- Safe-area insets on the bottom nav, sheets, dialogs and the floating button;
+  `interactive-widget=resizes-content` keeps the layout above the keyboard.
+- Form controls are 16px on small screens so focusing a field never zooms the
+  viewport.
+- Dialogs dock to the bottom edge on phones and centre from `sm` up; the
+  editor's selection actions are a scrollable chip rail with a fade edge.
+- The library's floating button only appears once the hero has scrolled away.
+
+**Windows / desktop**
+
+- Custom thin scrollbars in both WebKit and Firefox instead of the platform's
+  chunky default.
+- Hover and `:focus-visible` states on everything, tooltips (pointer devices
+  only) carrying the keyboard shortcut, and a `?` shortcut sheet.
+- Keyboard: `/` focuses library search, `n` starts a comic, and the editor
+  shortcuts below.
 
 ## Persistence
 
@@ -50,6 +104,9 @@ Import remaps all IDs so an existing comic is never overwritten.
 | Space+drag | Pan |
 | Arrows / Shift+Arrows | Nudge |
 | Esc | Select tool, close sheet |
-| Reader: Left click | Previous (desktop) |
-| Reader: Right click | Next (desktop) |
-| Reader: Left / right third | Previous / next (mobile) |
+| ? | Shortcut sheet |
+| / (library) | Focus search |
+| n (library) | New comic |
+| Reader: arrows / space | Previous / next |
+| Reader: tap or click | Next — except the side third behind you, which goes back (follows the reading direction) |
+| Reader: swipe | Previous / next |

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppNav } from "@/lib/comic/nav";
-import { Maximize2, Pause, Play, RotateCcw, X } from "lucide-react";
+import { BookOpen, Maximize2, MousePointerClick, Pause, Play, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { drawPage } from "@/lib/comic/draw";
 import { collectAssetIds, ensureAllUrls, getProject, mediaUrl } from "@/lib/comic/db";
@@ -87,7 +87,7 @@ export function ReaderView({ id }: { id: string }) {
   function bumpHud() {
     setHud(true);
     if (hideTimer.current) window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setHud(false), 2200);
+    hideTimer.current = window.setTimeout(() => setHud(false), 3200);
   }
 
   function snapCam(target: CameraRect) {
@@ -120,6 +120,7 @@ export function ReaderView({ id }: { id: string }) {
   function forward() {
     if (!project || !page) return;
     setHint(false);
+    bumpHud();
     if (ended) return;
     const next = advanceReveal(revealed, beats.length, pageIndex, project.pages.length);
     if (next.ended) {
@@ -165,7 +166,8 @@ export function ReaderView({ id }: { id: string }) {
     if (!playing) return;
     const ids = revealedItemIds(beats, revealed);
     page.items.forEach((it) => {
-      if (it.type === "video" && ids.has(it.id)) playVideo(it.assetId, it.muted, it.speed, it.volume);
+      if (it.type === "video" && ids.has(it.id))
+        playVideo(it.assetId, it.muted, it.speed, it.volume);
       else if (it.type === "video") pauseVideo(it.assetId);
     });
   }, [page, playing, revealed]);
@@ -251,7 +253,10 @@ export function ReaderView({ id }: { id: string }) {
       }
       if (camAnim.current) {
         const t = easeOutCubic((now - camAnim.current.t0) / camAnim.current.dur);
-        camNow.current = t >= 1 ? { ...camAnim.current.to } : lerpCamera(camAnim.current.from, camAnim.current.to, t);
+        camNow.current =
+          t >= 1
+            ? { ...camAnim.current.to }
+            : lerpCamera(camAnim.current.from, camAnim.current.to, t);
         if (t >= 1) camAnim.current = null;
       }
 
@@ -309,7 +314,11 @@ export function ReaderView({ id }: { id: string }) {
 
       const bag = getMediaBag();
       const playingVid = page.items.some(
-        (i) => i.type === "video" && visible.has(i.id) && bag.videos[i.assetId] && !bag.videos[i.assetId].paused,
+        (i) =>
+          i.type === "video" &&
+          visible.has(i.id) &&
+          bag.videos[i.assetId] &&
+          !bag.videos[i.assetId].paused,
       );
       if (camAnim.current || fadeT < 1 || veil.current.dir || playingVid) schedule();
     };
@@ -334,31 +343,91 @@ export function ReaderView({ id }: { id: string }) {
   }, [page, revealed, beats.length, pageIndex]);
 
   if (!project) {
-    return <div className="grid min-h-dvh place-items-center bg-bg text-muted">در حال آماده‌سازی خواننده…</div>;
+    return (
+      <div className="grid min-h-dvh place-items-center bg-bg text-muted">
+        <div className="flex flex-col items-center gap-3">
+          <span className="skeleton size-16 rounded-2xl" />
+          <span className="text-sm">در حال آماده‌سازی خواننده…</span>
+        </div>
+      </div>
+    );
   }
+
+  const pageCount = project.pages.length;
+  const beatCount = Math.max(1, beats.length);
+  // Right-to-left comics run backwards through the page: "next" lives on the
+  // left, so the tap zones (and their hints) flip with the reading direction.
+  const rtlRead = project.readingDirection !== "ltr";
 
   return (
     <div className="relative h-dvh overflow-hidden bg-bg text-fg">
+      {/* Top HUD — floats over the artwork on a scrim so buttons stay legible
+          against a bright panel, and fades out while reading. */}
       <div
-        className={`pointer-events-none fixed inset-x-0 top-0 z-10 flex items-start justify-between p-3 transition-opacity duration-200 ${hud ? "opacity-100" : "opacity-0"}`}
+        className={`pointer-events-none fixed inset-x-0 top-0 z-10 transition-opacity duration-300 ${
+          hud || hint ? "opacity-100" : "opacity-0"
+        }`}
       >
-        <div className="pointer-events-auto flex gap-2">
-          <Button variant="secondary" size="icon" onClick={() => go("/studio/$id", { id })} aria-label="بستن">
-            <X />
-          </Button>
-          <Button variant="secondary" size="icon" onClick={() => setPlaying((v) => !v)} aria-label="پخش">
-            {playing ? <Pause /> : <Play />}
-          </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={() => void document.documentElement.requestFullscreen?.()}
-            aria-label="تمام‌صفحه"
-          >
-            <Maximize2 />
-          </Button>
+        <div className="scrim-top pointer-events-none absolute inset-x-0 top-0 h-28" />
+        <div className="relative flex items-start justify-between gap-2 p-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+          <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-bg/70 p-1 shadow-[var(--shadow-lift)] backdrop-blur-md">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-full text-fg"
+              onClick={() => go("/studio/$id", { id })}
+              aria-label="بستن"
+            >
+              <X />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-full text-fg"
+              onClick={() => setPlaying((v) => !v)}
+              aria-label={playing ? "توقف صدا" : "پخش صدا"}
+            >
+              {playing ? <Pause /> : <Play />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-full text-fg"
+              onClick={() => void document.documentElement.requestFullscreen?.()}
+              aria-label="تمام‌صفحه"
+            >
+              <Maximize2 />
+            </Button>
+          </div>
+          <div className="pointer-events-none flex max-w-[55%] items-center gap-2 rounded-full bg-bg/70 px-3 py-1.5 text-xs backdrop-blur-md">
+            <BookOpen className="size-3.5 shrink-0 text-brand" />
+            <span className="truncate">{project.title}</span>
+          </div>
         </div>
-        <div className="rounded-full bg-bg/70 px-3 py-1 text-xs backdrop-blur">{project.title}</div>
+      </div>
+
+      {/* Bottom HUD — where you are in the story: page dots + beats on this page. */}
+      <div
+        className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-opacity duration-300 ${
+          hud || hint ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <div className="scrim-bottom pointer-events-none absolute inset-x-0 bottom-0 h-24" />
+        <div className="relative flex flex-col items-center gap-2 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="flex items-center gap-1.5" aria-hidden>
+            {Array.from({ length: beatCount }).map((_, i) => (
+              <span
+                key={i}
+                className={`h-1 rounded-full transition-all duration-300 ${
+                  i < revealed ? "w-6 bg-brand" : "w-3 bg-fg/25"
+                }`}
+              />
+            ))}
+          </div>
+          <div className="num rounded-full bg-bg/70 px-2.5 py-1 text-[11px] text-muted backdrop-blur-md">
+            {pageIndex + 1} / {pageCount}
+          </div>
+        </div>
       </div>
 
       <div
@@ -385,24 +454,53 @@ export function ReaderView({ id }: { id: string }) {
             back();
             return;
           }
-          if (Math.abs(dx) < 16 && Math.abs(dy) < 16) forward();
+          if (Math.abs(dx) < 16 && Math.abs(dy) < 16) {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const rel = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
+            const backZone = rtlRead ? rel > 0.72 : rel < 0.28;
+            if (backZone) back();
+            else forward();
+          }
         }}
       >
         <canvas ref={canvasRef} className="block size-full touch-none" />
         {hint && !ended && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-10 text-center">
-            <span className="rounded-full bg-bg/75 px-4 py-2 text-sm text-fg shadow-[var(--shadow-lift)] backdrop-blur">
-              بزن تا قاب بعدی باز شود
-            </span>
-          </div>
+          <>
+            {/* First-run coaching: shows the two tap zones, then gets out of
+                the way for good on the first interaction. */}
+            <div className="pointer-events-none absolute inset-0 animate-in fade-in duration-500">
+              <span
+                className="absolute top-1/2 -translate-y-1/2 rounded-full bg-bg/60 px-3 py-1.5 text-[11px] text-muted backdrop-blur-sm"
+                style={rtlRead ? { right: "6%" } : { left: "6%" }}
+              >
+                قبلی
+              </span>
+              <span
+                className="absolute top-1/2 -translate-y-1/2 rounded-full bg-bg/60 px-3 py-1.5 text-[11px] text-fg backdrop-blur-sm"
+                style={rtlRead ? { left: "6%" } : { right: "6%" }}
+              >
+                بعدی
+              </span>
+            </div>
+            <div className="pointer-events-none absolute inset-x-0 bottom-24 text-center">
+              <span className="inline-flex items-center gap-2 rounded-full bg-bg/80 px-4 py-2 text-sm text-fg shadow-[var(--shadow-lift)] backdrop-blur-md">
+                <MousePointerClick className="size-4 text-brand" />
+                بزن یا بکش تا قاب بعدی باز شود
+              </span>
+            </div>
+          </>
         )}
       </div>
 
       {ended && (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-bg/80 p-6">
-          <div className="w-full max-w-sm rounded-xl bg-surface p-6 text-center shadow-[var(--shadow-lift)]">
-            <h2 className="text-lg font-semibold">تمام شد</h2>
+        <div className="absolute inset-0 z-20 grid place-items-center bg-bg/85 p-6 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="material w-full max-w-sm rounded-2xl p-6 text-center shadow-[var(--shadow-lift)] animate-pop">
+            <div className="mx-auto mb-3 grid size-12 place-items-center rounded-full bg-brand/15 text-brand">
+              <BookOpen className="size-5" />
+            </div>
+            <h2 className="font-display text-2xl">تمام شد</h2>
             <p className="mt-1 text-sm text-muted">{project.title}</p>
+            <p className="num mt-3 text-[11px] text-subtle">{pageCount} صفحه خوانده شد</p>
             <div className="mt-5 flex flex-col gap-2">
               <Button
                 onClick={() => {

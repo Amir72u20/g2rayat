@@ -34,7 +34,8 @@ export function LayoutThumb({ layout, className }: { layout: PanelLayout; classN
           const w = Math.max(2, c.w * W - 1.6);
           const h = Math.max(2, c.h * H - 1.6);
           const kind = c.kind || "rect";
-          const fillOp = kind.startsWith("slash") || kind === "tri" || kind === "tri-down" ? 0.22 : 0.08;
+          const fillOp =
+            kind.startsWith("slash") || kind === "tri" || kind === "tri-down" ? 0.22 : 0.08;
           return (
             <path
               key={i}
@@ -61,7 +62,7 @@ export function LayoutGrid({ onPick }: { onPick?: (key: string) => void }) {
           type="button"
           title={L.n}
           onClick={() => (onPick ? onPick(L.k) : applyLayoutKey(L.k))}
-          className="flex h-14 flex-col items-center justify-center rounded-md bg-elevated p-1 hover:bg-line/50"
+          className="tap flex h-14 flex-col items-center justify-center rounded-lg bg-elevated p-1.5 text-muted shadow-[var(--shadow-border)] hover:bg-overlay hover:text-fg"
         >
           <LayoutThumb layout={L} />
         </button>
@@ -88,8 +89,10 @@ export function PanelKindGrid({
             title={s.n}
             onClick={() => onPick(s.k)}
             className={cn(
-              "flex h-12 items-center justify-center rounded-md p-1",
-              active ? "bg-select/35 text-select-fg" : "bg-elevated text-muted hover:text-fg",
+              "tap flex h-12 items-center justify-center rounded-lg p-1.5",
+              active
+                ? "bg-brand/15 text-brand shadow-[0_0_0_1.5px_var(--color-brand)]"
+                : "bg-elevated text-muted shadow-[var(--shadow-border)] hover:bg-overlay hover:text-fg",
             )}
           >
             <svg viewBox="0 0 36 28" className="h-full w-full">
@@ -116,7 +119,7 @@ export function PageBackgroundPicker({ onPickImage }: { onPickImage: () => void 
   const current = page.background.color;
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold">پس‌زمینه همین صفحه</div>
+      <div className="text-xs font-semibold">پس‌زمینهٔ همین صفحه</div>
       <p className="text-[11px] text-muted">رنگ کاغذ یا یک عکس از فایل‌هایت.</p>
       <div className="flex flex-wrap gap-1.5">
         {PAPER.map((p) => (
@@ -127,13 +130,14 @@ export function PageBackgroundPicker({ onPickImage }: { onPickImage: () => void 
             aria-label={p.n}
             onClick={() => setBgColor(p.c)}
             className={cn(
-              "size-9 rounded-full shadow-[var(--shadow-border)]",
-              current.toLowerCase() === p.c.toLowerCase() && "ring-2 ring-steel ring-offset-2 ring-offset-bg",
+              "tap size-9 rounded-full shadow-[var(--shadow-border)]",
+              current.toLowerCase() === p.c.toLowerCase() &&
+                "ring-2 ring-brand ring-offset-2 ring-offset-surface",
             )}
             style={{ background: p.c }}
           />
         ))}
-        <label className="grid size-9 place-items-center overflow-hidden rounded-full bg-elevated shadow-[var(--shadow-border)]">
+        <label className="tap grid size-9 place-items-center overflow-hidden rounded-full bg-elevated shadow-[var(--shadow-border)]">
           <input
             type="color"
             value={current}
@@ -166,7 +170,7 @@ export function PageBackgroundPicker({ onPickImage }: { onPickImage: () => void 
         <img
           src={thumbUrl(page.background.assetId)}
           alt=""
-          className="h-16 w-full rounded-md object-cover"
+          className="h-20 w-full rounded-lg object-cover shadow-[var(--shadow-border)]"
         />
       ) : null}
     </div>

@@ -18,7 +18,13 @@ import {
 } from "@/lib/comic/geometry";
 import { addPanelToPage } from "@/lib/comic/factory";
 import { cssClipForPanel, panelCentroid } from "@/lib/comic/panel-shape";
-import { getMediaBag, loadImageAsset, loadVideoAsset, seekVideo, tickVideoClip } from "@/lib/comic/media-cache";
+import {
+  getMediaBag,
+  loadImageAsset,
+  loadVideoAsset,
+  seekVideo,
+  tickVideoClip,
+} from "@/lib/comic/media-cache";
 import { useStudio } from "@/lib/comic/store";
 import { collectAssetIds } from "@/lib/comic/db";
 import { musicSpan } from "@/lib/comic/reader";
@@ -85,7 +91,11 @@ export function CanvasStage({
         <div>
           <h3 className="text-lg font-semibold">این کمیک صفحه‌ای ندارد</h3>
           <p className="mt-1 text-sm text-muted">یک صفحه تازه بساز.</p>
-          <button type="button" className="mt-4 h-11 rounded-md bg-elevated px-4 text-sm" onClick={addPage}>
+          <button
+            type="button"
+            className="tap mt-4 h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-brand-fg shadow-[var(--shadow-brand)]"
+            onClick={addPage}
+          >
             صفحه تازه
           </button>
         </div>
@@ -127,7 +137,7 @@ export function CanvasStage({
         <button
           type="button"
           onClick={addPage}
-          className="mt-2 flex h-14 items-center justify-center gap-2 rounded-lg border border-dashed border-line text-sm text-muted hover:text-fg"
+          className="tap mt-3 flex h-14 items-center justify-center gap-2 rounded-xl border border-dashed border-line text-sm text-muted hover:border-brand/60 hover:bg-elevated/60 hover:text-fg"
         >
           <Plus className="size-4" />
           صفحه تازه — به نوار اضافه می‌شود
@@ -150,7 +160,9 @@ function PageCanvas({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const pinch = useRef<{ dist: number; zoom: number; itemId?: string; itemZoom?: number } | null>(null);
+  const pinch = useRef<{ dist: number; zoom: number; itemId?: string; itemZoom?: number } | null>(
+    null,
+  );
   const drag = useRef<{
     mode: "pending" | "move" | "resize" | "tail" | "draw" | "pan" | "rotate" | "crop";
     id: string;
@@ -167,7 +179,10 @@ function PageCanvas({
   } | null>(null);
   const raf = useRef(0);
   const [onScreen, setOnScreen] = useState(true);
-  const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({
+    x: null,
+    y: null,
+  });
   const guidesRef = useRef(guides);
   guidesRef.current = guides;
   const [editing, setEditing] = useState<string | null>(null);
@@ -216,7 +231,8 @@ function PageCanvas({
     drawPage(ctx, pg, getMediaBag(), {
       selectedId: useStudio.getState().pageIndex === index ? useStudio.getState().selectedId : null,
       language: useStudio.getState().previewLanguage,
-      translations: useStudio.getState().project?.translations[useStudio.getState().previewLanguage],
+      translations:
+        useStudio.getState().project?.translations[useStudio.getState().previewLanguage],
       sourceLanguage: useStudio.getState().project?.sourceLanguage,
       guides: useStudio.getState().pageIndex === index ? guidesRef.current : undefined,
       displayW: cv.getBoundingClientRect().width,
@@ -240,10 +256,11 @@ function PageCanvas({
     const wrap = wrapRef.current;
     const root = stageRef.current;
     if (!wrap || !root) return;
-    const obs = new IntersectionObserver(
-      ([e]) => setOnScreen(e.isIntersecting),
-      { root, rootMargin: "180px", threshold: 0.01 },
-    );
+    const obs = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting), {
+      root,
+      rootMargin: "180px",
+      threshold: 0.01,
+    });
     obs.observe(wrap);
     return () => obs.disconnect();
   }, [stageRef]);
@@ -265,7 +282,9 @@ function PageCanvas({
       if (!live) return;
       const pg = useStudio.getState().project?.pages[index];
       const bag = getMediaBag();
-      const playing = pg?.items.some((i) => i.type === "video" && bag.videos[i.assetId] && !bag.videos[i.assetId].paused);
+      const playing = pg?.items.some(
+        (i) => i.type === "video" && bag.videos[i.assetId] && !bag.videos[i.assetId].paused,
+      );
       if (playing && onScreen) paint();
       if (playing) id = requestAnimationFrame(loop);
     };
@@ -588,7 +607,9 @@ function PageCanvas({
         }
         if (it.type === "panel") {
           pgLive.items
-            .filter((c) => c.panelId === it.id && (c.type === "image" || c.type === "video") && !c.free)
+            .filter(
+              (c) => c.panelId === it.id && (c.type === "image" || c.type === "video") && !c.free,
+            )
             .forEach((c) => {
               c.x = it.x;
               c.y = it.y;
@@ -678,9 +699,14 @@ function PageCanvas({
   const selected = active ? (pg.items.find((i) => i.id === selectedId) ?? null) : null;
   const framed = isFramedMedia(selected);
   const filled = new Set(
-    pg.items.filter((i) => (i.type === "image" || i.type === "video") && i.panelId && !i.free).map((i) => i.panelId as string),
+    pg.items
+      .filter((i) => (i.type === "image" || i.type === "video") && i.panelId && !i.free)
+      .map((i) => i.panelId as string),
   );
-  const emptyPanels = pg.items.filter((i): i is Extract<ComicItem, { type: "panel" }> => i.type === "panel" && !filled.has(i.id) && !i.hidden);
+  const emptyPanels = pg.items.filter(
+    (i): i is Extract<ComicItem, { type: "panel" }> =>
+      i.type === "panel" && !filled.has(i.id) && !i.hidden,
+  );
 
   return (
     <div
@@ -700,7 +726,7 @@ function PageCanvas({
         onPointerCancel={onPointerUp}
         onContextMenu={(e) => e.preventDefault()}
       />
-      <div className="pointer-events-none absolute start-2 top-2 rounded-full bg-bg/70 px-2 py-0.5 text-[10px] text-fg">
+      <div className="num pointer-events-none absolute start-2 top-2 rounded-full bg-bg/75 px-2 py-0.5 text-[10px] font-semibold text-fg backdrop-blur-sm">
         {index + 1}
       </div>
       {emptyPanels.map((panel) => {
@@ -720,7 +746,7 @@ function PageCanvas({
             }}
           >
             <span
-              className="pointer-events-auto absolute rounded-full bg-bg/80 px-3 py-2 text-xs text-fg shadow-[var(--shadow-lift)]"
+              className="tap pointer-events-auto absolute flex items-center gap-1.5 rounded-full bg-bg/85 px-3.5 py-2 text-xs font-medium text-fg shadow-[var(--shadow-lift)] backdrop-blur-sm"
               style={{
                 left: `${((c.x - panel.x) / panel.w) * 100}%`,
                 top: `${((c.y - panel.y) / panel.h) * 100}%`,
@@ -733,43 +759,65 @@ function PageCanvas({
                 useStudio.getState().setSheet("media");
               }}
             >
+              <ImagePlus className="size-3.5 text-brand" />
               تصویر یا ویدئو
             </span>
           </button>
         );
       })}
       {active && tool === "panel" && (
-        <div className="pointer-events-none absolute inset-x-2 top-8 rounded-md bg-bg/80 px-2 py-1.5 text-center text-[11px] text-fg">
-          روی صفحه بکش تا قاب تازه ساخته شود
+        <div className="pointer-events-none absolute inset-x-0 top-8 flex justify-center">
+          <span className="rounded-full bg-brand/90 px-3 py-1.5 text-[11px] font-medium text-brand-fg shadow-[var(--shadow-lift)]">
+            روی صفحه بکش تا قاب تازه ساخته شود
+          </span>
         </div>
       )}
       {active && framed && (
-        <div className="pointer-events-none absolute inset-x-2 bottom-2 rounded-md bg-bg/70 px-2 py-1 text-center text-[10px] text-fg">
-          بکش: جابه‌جایی داخل قاب · گوشه‌ها: اندازه · دو انگشت: بزرگ‌نمایی
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-2">
+          <span className="rounded-full bg-bg/75 px-3 py-1 text-center text-[10px] text-fg backdrop-blur-sm">
+            بکش: جابه‌جایی داخل قاب · گوشه‌ها: اندازه · دو انگشت: بزرگ‌نمایی
+          </span>
         </div>
       )}
-      {active && selected && (selected.type === "image" || selected.type === "video") && !framed && (
-        <div className="pointer-events-none absolute inset-x-2 bottom-2 rounded-md bg-bg/70 px-2 py-1 text-center text-[10px] text-fg">
-          گوشه‌های سبز را بکش یا دو انگشت بزن تا کوچک و بزرگ شود
-        </div>
-      )}
+      {active &&
+        selected &&
+        (selected.type === "image" || selected.type === "video") &&
+        !framed && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center px-2">
+            <span className="rounded-full bg-bg/75 px-3 py-1 text-center text-[10px] text-fg backdrop-blur-sm">
+              گوشه‌ها را بکش یا دو انگشت بزن تا کوچک و بزرگ شود
+            </span>
+          </div>
+        )}
       {editing && selected && (selected.type === "bubble" || selected.type === "text") && (
-        <InlineEdit item={selected} pageW={pg.w} pageH={pg.h} onDone={() => { setEditing(null); useStudio.getState().requestEdit(null); }} />
+        <InlineEdit
+          item={selected}
+          pageW={pg.w}
+          pageH={pg.h}
+          onDone={() => {
+            setEditing(null);
+            useStudio.getState().requestEdit(null);
+          }}
+        />
       )}
       {floatPos && selected && !editing && (
         <div
-          className="absolute z-10 hidden -translate-x-1/2 -translate-y-full gap-1 rounded-lg bg-bg/95 p-1 shadow-[var(--shadow-lift)] lg:flex"
+          className="absolute z-10 hidden -translate-x-1/2 -translate-y-full gap-0.5 rounded-xl bg-overlay/95 p-1 shadow-[var(--shadow-lift)] backdrop-blur-md lg:flex"
           style={{ left: floatPos.x, top: Math.max(8, floatPos.y) }}
         >
           <IconBtn
             label="تصویر"
-            onClick={() => onPickFiles("image", selected.type === "panel" ? selected.id : selected.panelId)}
+            onClick={() =>
+              onPickFiles("image", selected.type === "panel" ? selected.id : selected.panelId)
+            }
           >
             <ImagePlus className="size-4" />
           </IconBtn>
           <IconBtn
             label="ویدئو"
-            onClick={() => onPickFiles("video", selected.type === "panel" ? selected.id : selected.panelId)}
+            onClick={() =>
+              onPickFiles("video", selected.type === "panel" ? selected.id : selected.panelId)
+            }
           >
             <Film className="size-4" />
           </IconBtn>
@@ -858,7 +906,9 @@ function MusicRail({
     if (!row) return edge === "top" ? lineTop : lineBot;
     return edge === "top" ? row.top : row.top + row.height;
   };
-  const handleY = span ? Math.min(lineBot - 8, Math.max(lineTop + 36, yOf(span.end, "bottom") - 12)) : lineTop + 36;
+  const handleY = span
+    ? Math.min(lineBot - 8, Math.max(lineTop + 36, yOf(span.end, "bottom") - 12))
+    : lineTop + 36;
 
   function pageAtClientY(clientY: number) {
     const root = railRef.current?.parentElement;
@@ -877,17 +927,13 @@ function MusicRail({
     setAmbientThrough(pageAtClientY(clientY));
   }
 
-  const handleLabel = span
-    ? span.end >= pages.length - 1
-      ? "آخر"
-      : `${span.end + 1}`
-    : "";
+  const handleLabel = span ? (span.end >= pages.length - 1 ? "آخر" : `${span.end + 1}`) : "";
 
   return (
     <div ref={railRef} className="pointer-events-none absolute top-0 right-0 z-20 h-full w-16">
       <button
         type="button"
-        className="pointer-events-auto absolute right-1.5 z-10 grid size-11 place-items-center rounded-xl bg-elevated text-fg shadow-[var(--shadow-lift)]"
+        className="tap pointer-events-auto absolute right-1.5 z-10 grid size-11 place-items-center rounded-xl bg-elevated text-fg shadow-[var(--shadow-lift)] hover:bg-overlay"
         style={{ top: Math.max(8, geom.top + 8) }}
         aria-label={span ? "عوض کردن موسیقی پس‌زمینه" : "افزودن موسیقی پس‌زمینه"}
         title={span ? "موسیقی پس‌زمینه" : "افزودن موسیقی پس‌زمینه"}
@@ -941,7 +987,8 @@ function MusicRail({
           style={{
             background:
               "linear-gradient(180deg, color-mix(in oklab, var(--color-steel) 28%, transparent), color-mix(in oklab, var(--color-steel) 55%, transparent), color-mix(in oklab, var(--color-steel) 28%, transparent))",
-            boxShadow: "inset 1px 0 0 rgba(255,255,255,0.28), inset -1px 0 0 rgba(0,0,0,0.35), 0 0 10px color-mix(in oklab, var(--color-steel) 32%, transparent)",
+            boxShadow:
+              "inset 1px 0 0 rgba(255,255,255,0.28), inset -1px 0 0 rgba(0,0,0,0.35), 0 0 10px color-mix(in oklab, var(--color-steel) 32%, transparent)",
           }}
         />
       </div>
@@ -1020,14 +1067,22 @@ function MusicRail({
   );
 }
 
-function IconBtn({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) {
+function IconBtn({
+  children,
+  onClick,
+  label,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  label: string;
+}) {
   return (
     <button
       type="button"
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="grid size-11 place-items-center rounded-md text-fg hover:bg-elevated"
+      className="tap grid size-10 place-items-center rounded-lg text-muted hover:bg-elevated hover:text-fg"
     >
       {children}
     </button>
@@ -1067,7 +1122,7 @@ function InlineEdit({
         autoFocus
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        className="min-h-16 w-full resize-none rounded-md bg-white p-2 text-center text-ink shadow-[var(--shadow-lift)]"
+        className="min-h-16 w-full resize-none rounded-lg bg-white p-2 text-center leading-relaxed text-ink shadow-[var(--shadow-lift)] outline-none ring-2 ring-brand"
         style={{ fontSize: `${Math.max(14, ("font" in item ? item.font : 24) * 0.42)}px` }}
         onKeyDown={(e) => {
           e.stopPropagation();
@@ -1081,11 +1136,22 @@ function InlineEdit({
           }
         }}
       />
-      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 flex gap-2 bg-bg/95 p-3 shadow-[var(--shadow-lift)] lg:static lg:bg-transparent lg:p-0 lg:shadow-none">
-        <button type="button" className="h-12 flex-1 rounded-md bg-primary text-sm font-semibold text-primary-fg" onClick={commit}>
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 flex gap-2 bg-surface/95 p-3 shadow-[var(--shadow-lift)] backdrop-blur-md lg:static lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+        <button
+          type="button"
+          className="tap h-12 flex-1 rounded-lg bg-brand text-sm font-semibold text-brand-fg shadow-[var(--shadow-brand)]"
+          onClick={commit}
+        >
           ثبت
         </button>
-        <button type="button" className="h-12 flex-1 rounded-md bg-elevated text-sm text-fg shadow-[var(--shadow-border)]" onClick={() => { useStudio.getState().requestEdit(null); onDone(); }}>
+        <button
+          type="button"
+          className="tap h-12 flex-1 rounded-lg bg-elevated text-sm text-fg shadow-[var(--shadow-border)]"
+          onClick={() => {
+            useStudio.getState().requestEdit(null);
+            onDone();
+          }}
+        >
           انصراف
         </button>
       </div>

@@ -23,7 +23,8 @@ export function sourceSize(src: CanvasImageSource | null | undefined) {
   if (!src) return { w: 0, h: 0 };
   if (src instanceof HTMLVideoElement) return { w: src.videoWidth, h: src.videoHeight };
   if (src instanceof HTMLCanvasElement) return { w: src.width, h: src.height };
-  if (src instanceof HTMLImageElement) return { w: src.naturalWidth || src.width, h: src.naturalHeight || src.height };
+  if (src instanceof HTMLImageElement)
+    return { w: src.naturalWidth || src.width, h: src.naturalHeight || src.height };
   return { w: 0, h: 0 };
 }
 
@@ -77,7 +78,7 @@ export function drawPage(
   }
   if (opts.guides && (opts.guides.x != null || opts.guides.y != null)) {
     ctx.save();
-    ctx.strokeStyle = "#7aa2c4";
+    ctx.strokeStyle = "#6cc6db";
     ctx.lineWidth = 2;
     ctx.setLineDash([12, 8]);
     ctx.globalAlpha = 0.72;
@@ -184,7 +185,8 @@ function mediaFrame(
   ctx.globalAlpha = clamp(it.opacity ?? 1, 0, 1);
   if (src && sw && sh) {
     const zoom = it.zoom || 1;
-    const base = it.fitMode === "fit" ? Math.min(it.w / sw, it.h / sh) : Math.max(it.w / sw, it.h / sh);
+    const base =
+      it.fitMode === "fit" ? Math.min(it.w / sw, it.h / sh) : Math.max(it.w / sw, it.h / sh);
     const scale = base * zoom;
     const dw = sw * scale;
     const dh = sh * scale;
@@ -266,7 +268,8 @@ function drawShape(ctx: CanvasRenderingContext2D, it: ShapeItem) {
   ctx.rotate(((it.rot || 0) * Math.PI) / 180);
   ctx.translate(-cx, -cy);
   ctx.beginPath();
-  if (it.kind === "circle") ctx.ellipse(cx, cy, Math.abs(it.w / 2), Math.abs(it.h / 2), 0, 0, Math.PI * 2);
+  if (it.kind === "circle")
+    ctx.ellipse(cx, cy, Math.abs(it.w / 2), Math.abs(it.h / 2), 0, 0, Math.PI * 2);
   else if (it.kind === "line" || it.kind === "arrow") {
     ctx.moveTo(it.x, it.y);
     ctx.lineTo(it.x + it.w, it.y + it.h);
@@ -332,7 +335,12 @@ function bubblePath(ctx: CanvasRenderingContext2D, it: BubbleItem) {
 function drawBubble(
   ctx: CanvasRenderingContext2D,
   raw: BubbleItem,
-  opts: { language?: string; translations?: Record<string, string>; sourceLanguage?: string; timeMs?: number },
+  opts: {
+    language?: string;
+    translations?: Record<string, string>;
+    sourceLanguage?: string;
+    timeMs?: number;
+  },
 ) {
   const it = raw;
   let text = textFor(it, opts);
@@ -395,29 +403,24 @@ function drawBubble(
   if ((it.stroke ?? 5) > 0) ctx.stroke();
   ctx.setLineDash([]);
   ctx.restore();
-  drawText(
-    ctx,
-    { ...it, text },
-    it.x + pad,
-    it.y + pad,
-    it.w - pad * 2,
-    it.h - pad * 2,
-  );
+  drawText(ctx, { ...it, text }, it.x + pad, it.y + pad, it.w - pad * 2, it.h - pad * 2);
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number) {
   const out: string[] = [];
-  String(text || "").split("\n").forEach((para) => {
-    let line = "";
-    para.split(" ").forEach((word) => {
-      const t = line ? `${line} ${word}` : word;
-      if (ctx.measureText(t).width > maxW && line) {
-        out.push(line);
-        line = word;
-      } else line = t;
+  String(text || "")
+    .split("\n")
+    .forEach((para) => {
+      let line = "";
+      para.split(" ").forEach((word) => {
+        const t = line ? `${line} ${word}` : word;
+        if (ctx.measureText(t).width > maxW && line) {
+          out.push(line);
+          line = word;
+        } else line = t;
+      });
+      out.push(line);
     });
-    out.push(line);
-  });
   return out;
 }
 
@@ -482,9 +485,14 @@ function drawTextBox(
   drawText(ctx, { ...it, text: textFor(it, opts) }, it.x, it.y, it.w, it.h);
 }
 
+/* Selection chrome, in the studio's own accent: a vermilion marquee with white
+   grips. A soft dark shadow keeps the grips readable over pale artwork. */
+const SEL_LINE = "#ef6446";
+const SEL_GRIP = "#ffffff";
+
 function drawHandles(ctx: CanvasRenderingContext2D, it: ComicItem, hs: number) {
   ctx.save();
-  ctx.strokeStyle = "#3d6b55";
+  ctx.strokeStyle = SEL_LINE;
   ctx.lineWidth = Math.max(2, hs * 0.08);
   ctx.setLineDash([10, 6]);
   ctx.strokeRect(it.x, it.y, it.w, it.h);
@@ -500,39 +508,47 @@ function drawHandles(ctx: CanvasRenderingContext2D, it: ComicItem, hs: number) {
     [it.x + it.w, it.y + it.h / 2],
   ];
   const s = Math.max(18, hs * 0.5);
-  ctx.fillStyle = "#eef4ef";
-  ctx.strokeStyle = "#276749";
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = Math.max(3, s * 0.22);
+  ctx.shadowOffsetY = 1;
+  ctx.fillStyle = SEL_GRIP;
+  ctx.strokeStyle = SEL_LINE;
   ctx.lineWidth = 2;
   dots.forEach(([x, y]) => {
     ctx.beginPath();
-    ctx.roundRect(x - s / 2, y - s / 2, s, s, 4);
+    ctx.roundRect(x - s / 2, y - s / 2, s, s, 5);
     ctx.fill();
     ctx.stroke();
   });
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  // Bubble tail grip — filled, so it reads as "drag me" next to the square grips.
   if (it.type === "bubble" && it.kind !== "caption" && it.kind !== "none") {
     const tx = it.tx;
     const ty = it.ty;
     ctx.beginPath();
     ctx.arc(tx, ty, s * 0.7, 0, Math.PI * 2);
-    ctx.fillStyle = "#276749";
+    ctx.fillStyle = SEL_LINE;
     ctx.fill();
-    ctx.strokeStyle = "#eef4ef";
+    ctx.strokeStyle = SEL_GRIP;
     ctx.stroke();
   }
+  // Rotation stem above the item.
   if (it.type !== "panel") {
     const hx = it.x + it.w / 2;
     const hy = it.y - hs * 1.2;
     ctx.beginPath();
     ctx.moveTo(it.x + it.w / 2, it.y);
     ctx.lineTo(hx, hy);
-    ctx.strokeStyle = "#276749";
+    ctx.strokeStyle = SEL_LINE;
     ctx.lineWidth = Math.max(2, hs * 0.06);
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(hx, hy, s * 0.55, 0, Math.PI * 2);
-    ctx.fillStyle = "#eef4ef";
+    ctx.fillStyle = SEL_GRIP;
     ctx.fill();
-    ctx.strokeStyle = "#276749";
+    ctx.strokeStyle = SEL_LINE;
     ctx.stroke();
   }
   ctx.restore();
@@ -548,4 +564,3 @@ export function renderPageToCanvas(page: ComicPage, media: MediaBag, scale = 1) 
   drawPage(ctx, page, media, { handles: false });
   return cv;
 }
-

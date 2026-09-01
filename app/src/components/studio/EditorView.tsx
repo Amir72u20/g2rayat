@@ -2,20 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { useAppNav } from "@/lib/comic/nav";
 import {
   ChevronRight,
+  Copy,
   Eye,
   Film,
+  Image,
   ImagePlus,
+  Keyboard,
   Layers,
+  Maximize,
   MessageCircle,
+  Minus,
   MoreHorizontal,
   MousePointer2,
   Music,
+  Palette,
   Pencil,
   Plus,
   Redo2,
   Save,
   Square,
   SquareDashed,
+  Trash2,
   Type,
   Undo2,
   ZoomIn,
@@ -26,13 +33,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { BottomSheet } from "@/components/ui/sheet";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ShortcutsDialog } from "./Shortcuts";
 import { CanvasStage } from "./CanvasStage";
 import { Inspector, AudioEditor } from "./Inspector";
 import { PageStrip } from "./PageStrip";
@@ -43,6 +55,9 @@ import { renderPageToCanvas } from "@/lib/comic/draw";
 import { getMediaBag, loadImageAsset, loadVideoAsset } from "@/lib/comic/media-cache";
 import { collectAssetIds, ensureAllUrls, thumbUrl } from "@/lib/comic/db";
 import type { BubbleKind, PanelKind, ShapeKind, StudioSheet } from "@/lib/comic/types";
+
+/** Ink palette for the pen — comic blacks, paper white, and the studio accent. */
+const INK_COLORS = ["#15171c", "#ffffff", "#ef6446", "#2f6df6", "#f4b942", "#2fa96b"];
 
 const BUBBLES: { k: BubbleKind; n: string }[] = [
   { k: "round", n: "گفتگو" },
@@ -110,6 +125,7 @@ export function EditorView({ id }: { id: string }) {
   const pickOpts = useRef<{ panelId?: string; extra?: string }>({});
   const spacePrev = useRef<"select" | "draw" | "pan" | "panel" | null>(null);
   const [leaveOpen, setLeaveOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -120,7 +136,10 @@ export function EditorView({ id }: { id: string }) {
       if (st.project?.id !== id) tasks.push(st.openProject(id));
       else {
         const p = st.project;
-        if (p) void ensureAllUrls(collectAssetIds(p)).then(() => useStudio.setState({ mediaTick: Date.now() }));
+        if (p)
+          void ensureAllUrls(collectAssetIds(p)).then(() =>
+            useStudio.setState({ mediaTick: Date.now() }),
+          );
       }
       await Promise.all(tasks);
       if (!live) return;
@@ -128,7 +147,10 @@ export function EditorView({ id }: { id: string }) {
     })();
     return () => {
       live = false;
-      void useStudio.getState().saveNow().catch(() => undefined);
+      void useStudio
+        .getState()
+        .saveNow()
+        .catch(() => undefined);
     };
   }, [id, boot, openProject]);
 
@@ -136,7 +158,11 @@ export function EditorView({ id }: { id: string }) {
     function onVis() {
       if (document.visibilityState === "hidden") {
         const p = useStudio.getState().project;
-        if (p && useStudio.getState().dirty) void useStudio.getState().saveNow().catch(() => undefined);
+        if (p && useStudio.getState().dirty)
+          void useStudio
+            .getState()
+            .saveNow()
+            .catch(() => undefined);
         return;
       }
       const p = useStudio.getState().project;
@@ -151,7 +177,11 @@ export function EditorView({ id }: { id: string }) {
     }
     function onHide() {
       const p = useStudio.getState().project;
-      if (p && useStudio.getState().dirty) void useStudio.getState().saveNow().catch(() => undefined);
+      if (p && useStudio.getState().dirty)
+        void useStudio
+          .getState()
+          .saveNow()
+          .catch(() => undefined);
     }
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pageshow", onVis);
@@ -176,7 +206,8 @@ export function EditorView({ id }: { id: string }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
-      const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      const typing =
+        tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
       if (e.code === "Space" && !typing) {
         if (!spacePrev.current) {
           spacePrev.current = useStudio.getState().tool;
@@ -188,7 +219,8 @@ export function EditorView({ id }: { id: string }) {
       const cmd = e.ctrlKey || e.metaKey;
       if (cmd && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        e.shiftKey ? redoAction() : undoAction();
+        if (e.shiftKey) redoAction();
+        else undoAction();
         return;
       }
       if (cmd && e.key.toLowerCase() === "y") {
@@ -239,6 +271,11 @@ export function EditorView({ id }: { id: string }) {
         return;
       }
       if (typing) return;
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
       if (e.key === "Tab") {
         e.preventDefault();
         cyclePanels(e.shiftKey ? -1 : 1);
@@ -249,7 +286,12 @@ export function EditorView({ id }: { id: string }) {
         setTool("select");
         select(null);
       }
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") {
+      if (
+        e.key === "ArrowLeft" ||
+        e.key === "ArrowRight" ||
+        e.key === "ArrowUp" ||
+        e.key === "ArrowDown"
+      ) {
         e.preventDefault();
         const step = e.shiftKey ? 24 : 4;
         const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
@@ -346,9 +388,37 @@ export function EditorView({ id }: { id: string }) {
 
   const fileInputs = (
     <>
-      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/*" multiple className="hidden" onChange={(e) => { onFiles("image", e.target.files); e.target.value = ""; }} />
-      <input ref={videoInput} type="file" accept="video/*,video/mp4,video/webm,video/quicktime" className="hidden" onChange={(e) => { onFiles("video", e.target.files); e.target.value = ""; }} />
-      <input ref={audioInput} type="file" accept="audio/*,audio/mpeg,audio/wav,audio/ogg,audio/mp4,.mp3,.wav,.ogg,.m4a" className="hidden" onChange={(e) => { onFiles("audio", e.target.files); e.target.value = ""; }} />
+      <input
+        ref={imageInput}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          onFiles("image", e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={videoInput}
+        type="file"
+        accept="video/*,video/mp4,video/webm,video/quicktime"
+        className="hidden"
+        onChange={(e) => {
+          onFiles("video", e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={audioInput}
+        type="file"
+        accept="audio/*,audio/mpeg,audio/wav,audio/ogg,audio/mp4,.mp3,.wav,.ogg,.m4a"
+        className="hidden"
+        onChange={(e) => {
+          onFiles("audio", e.target.files);
+          e.target.value = "";
+        }}
+      />
     </>
   );
 
@@ -361,120 +431,239 @@ export function EditorView({ id }: { id: string }) {
     );
   }
 
-  const savedLabel = saveStatus === "saved" ? "ذخیره شد" : saveStatus === "saving" ? "…" : persistError ? "خطا در ذخیره" : "ذخیره نشده";
+  const saveTone = persistError
+    ? "danger"
+    : saveStatus === "saved"
+      ? "ok"
+      : saveStatus === "saving"
+        ? "warn"
+        : "idle";
+  const savedLabel = persistError
+    ? "ذخیره نشد"
+    : saveStatus === "saved"
+      ? "ذخیره شد"
+      : saveStatus === "saving"
+        ? "در حال ذخیره"
+        : "ذخیره‌نشده";
 
   return (
-    <div className="relative flex h-dvh flex-col overflow-hidden bg-bg text-fg overscroll-none">
+    <div className="relative flex h-dvh flex-col overflow-hidden overscroll-none bg-bg text-fg">
       {fileInputs}
-      <header className="z-30 flex h-12 shrink-0 items-center gap-1.5 border-b border-line bg-bg px-2 pl-16 md:px-3">
-        <Button variant="ghost" size="icon-sm" onClick={() => void goHome()} aria-label="بازگشت">
-          <ChevronRight />
-        </Button>
+      <header className="z-30 flex h-14 shrink-0 items-center gap-1 border-b border-line bg-surface px-2 pl-16 md:px-3">
+        <Tooltip content="کتابخانه">
+          <Button variant="ghost" size="icon-sm" onClick={() => void goHome()} aria-label="بازگشت">
+            <ChevronRight />
+          </Button>
+        </Tooltip>
         <Input
           value={project.title}
           onChange={(e) => setTitle(e.target.value)}
-          className="h-9 min-w-0 flex-1 md:max-w-xs"
+          className="h-9 min-w-0 flex-1 bg-transparent font-semibold shadow-none hover:bg-elevated focus-visible:bg-bg md:max-w-xs"
           aria-label="نام کمیک"
         />
-        <span className={`shrink-0 text-[11px] ${persistError ? "text-danger" : "hidden text-muted sm:inline"}`}>{savedLabel}</span>
+        <SaveState tone={saveTone} label={savedLabel} />
         <div className="ms-auto flex items-center gap-0.5">
-          <Button
-            variant={saveStatus === "unsaved" || persistError ? "default" : "ghost"}
-            size="sm"
-            onClick={() => void saveNow().then(() => toast.success("ذخیره شد"))}
-            aria-label="ذخیره"
-          >
-            <Save />
-            <span className="hidden sm:inline">ذخیره</span>
-          </Button>
-          <Button variant="ghost" size="icon-sm" className="hidden md:inline-flex" onClick={undoAction} disabled={!undo.length} aria-label="واگرد">
-            <Undo2 />
-          </Button>
-          <Button variant="ghost" size="icon-sm" className="hidden md:inline-flex" onClick={redoAction} disabled={!redo.length} aria-label="ازنو">
-            <Redo2 />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="پیش‌نمایش"
-            onClick={() => {
-              void saveNow()
-                .catch(() => undefined)
-                .finally(() => go("/read/$id", { id: project.id }));
-            }}
-          >
-            <Eye />
-            <span className="hidden sm:inline">پیش‌نمایش</span>
-          </Button>
+          <Tooltip content="واگرد" shortcut="Ctrl Z">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="hidden md:inline-flex"
+              onClick={undoAction}
+              disabled={!undo.length}
+              aria-label="واگرد"
+            >
+              <Undo2 />
+            </Button>
+          </Tooltip>
+          <Tooltip content="ازنو" shortcut="Ctrl Y">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="hidden md:inline-flex"
+              onClick={redoAction}
+              disabled={!redo.length}
+              aria-label="ازنو"
+            >
+              <Redo2 />
+            </Button>
+          </Tooltip>
+          <span className="mx-1 hidden h-6 w-px bg-line md:block" />
+          <Tooltip content="ذخیره" shortcut="Ctrl S">
+            <Button
+              variant={saveStatus === "unsaved" || persistError ? "default" : "ghost"}
+              size="sm"
+              onClick={() => void saveNow().then(() => toast.success("ذخیره شد"))}
+              aria-label="ذخیره"
+            >
+              <Save />
+              <span className="hidden sm:inline">ذخیره</span>
+            </Button>
+          </Tooltip>
+          <Tooltip content="کمیک را مثل خواننده ببین">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label="پیش‌نمایش"
+              onClick={() => {
+                void saveNow()
+                  .catch(() => undefined)
+                  .finally(() => go("/read/$id", { id: project.id }));
+              }}
+            >
+              <Eye />
+              <span className="hidden sm:inline">پیش‌نمایش</span>
+            </Button>
+          </Tooltip>
+          <Tooltip content="کلیدهای میان‌بر" shortcut="؟">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="hidden lg:inline-flex"
+              onClick={() => setShortcutsOpen(true)}
+              aria-label="کلیدهای میان‌بر"
+            >
+              <Keyboard />
+            </Button>
+          </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label="بیشتر">
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onSelect={() => undoAction()}>واگرد</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => redoAction()}>ازنو</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setZoom(viewZoom - 0.1)}>کوچک‌نمایی</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setZoom(viewZoom + 0.1)}>بزرگ‌نمایی</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setZoom(1)}>اندازه واقعی</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void exportPage(false)}>خروجی PNG</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void exportProjectFile()}>خروجی پرونده</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => void setCoverFromPage()}>این صفحه جلد شود</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => openSheet("pages", "pages")}>صفحه‌ها</DropdownMenuItem>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>ویرایش</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => undoAction()}>
+                <Undo2 />
+                واگرد
+                <DropdownMenuShortcut>Ctrl Z</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => redoAction()}>
+                <Redo2 />
+                ازنو
+                <DropdownMenuShortcut>Ctrl Y</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>نما</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => setZoom(viewZoom - 0.1)}>
+                <ZoomOut />
+                کوچک‌نمایی
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setZoom(viewZoom + 0.1)}>
+                <ZoomIn />
+                بزرگ‌نمایی
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setZoom(1)}>
+                <Maximize />
+                اندازه واقعی
+                <DropdownMenuShortcut>Ctrl 0</DropdownMenuShortcut>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>خروجی و صفحه‌ها</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={() => void exportPage(false)}>
+                <Image />
+                خروجی PNG این صفحه
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void exportProjectFile()}>
+                <Save />
+                خروجی پرونده
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void setCoverFromPage()}>
+                <Square />
+                این صفحه جلد شود
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => openSheet("pages", "pages")}>
+                <Layers />
+                صفحه‌ها
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setShortcutsOpen(true)}>
+                <Keyboard />
+                کلیدهای میان‌بر
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 flex-col border-e border-line bg-surface lg:flex">
-          <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold">
-            صفحه‌ها
-            <Button variant="ghost" size="icon-sm" onClick={addPage} aria-label="صفحه تازه">
-              <Plus />
-            </Button>
+        <aside className="hidden w-60 shrink-0 flex-col border-e border-line bg-surface lg:flex">
+          <div className="flex items-center gap-2 border-b border-line-soft px-3 py-2.5">
+            <span className="text-xs font-semibold">صفحه‌ها</span>
+            <span className="num rounded-full bg-elevated px-1.5 py-0.5 text-[10px] text-muted">
+              {project.pages.length}
+            </span>
+            <Tooltip content="صفحه تازه">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="ms-auto"
+                onClick={addPage}
+                aria-label="صفحه تازه"
+              >
+                <Plus />
+              </Button>
+            </Tooltip>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             <PageStrip variant="col" />
           </div>
         </aside>
 
-        <aside className="hidden w-12 shrink-0 flex-col items-center gap-1 border-e border-line py-2 lg:flex">
-          <RailIcon active={tool === "select"} label="انتخاب" onClick={() => setTool("select")}>
-            <MousePointer2 className="size-4" />
+        <aside className="hidden w-14 shrink-0 flex-col items-center gap-1 border-e border-line bg-surface py-3 lg:flex">
+          <RailIcon
+            active={tool === "select"}
+            label="انتخاب"
+            shortcut="Esc"
+            onClick={() => setTool("select")}
+          >
+            <MousePointer2 className="size-[18px]" />
           </RailIcon>
           <RailIcon active={tool === "panel"} label="کشیدن قاب" onClick={() => setTool("panel")}>
-            <SquareDashed className="size-4" />
+            <SquareDashed className="size-[18px]" />
           </RailIcon>
+          <RailDivider />
           <RailIcon label="تصویر" onClick={() => pick("image")}>
-            <ImagePlus className="size-4" />
+            <ImagePlus className="size-[18px]" />
           </RailIcon>
           <RailIcon label="ویدئو" onClick={() => pick("video")}>
-            <Film className="size-4" />
+            <Film className="size-[18px]" />
           </RailIcon>
-          <RailIcon label="صدا" onClick={() => openSheet("audio")}>
-            <Music className="size-4" />
+          <RailIcon label="صدا و موسیقی" onClick={() => openSheet("audio")}>
+            <Music className="size-[18px]" />
           </RailIcon>
+          <RailDivider />
           <RailIcon label="متن" onClick={addText}>
-            <Type className="size-4" />
+            <Type className="size-[18px]" />
           </RailIcon>
-          <RailIcon label="حباب" onClick={() => addBubble("round")}>
-            <MessageCircle className="size-4" />
+          <RailIcon label="حباب گفتگو" onClick={() => addBubble("round")}>
+            <MessageCircle className="size-[18px]" />
           </RailIcon>
           <RailIcon label="شکل" onClick={() => addShape("rect")}>
-            <Square className="size-4" />
+            <Square className="size-[18px]" />
           </RailIcon>
-          <RailIcon active={tool === "draw"} label="قلم" onClick={() => setTool("draw")}>
-            <Pencil className="size-4" />
+          <RailIcon active={tool === "draw"} label="قلم آزاد" onClick={() => setTool("draw")}>
+            <Pencil className="size-[18px]" />
           </RailIcon>
-          <div className="mt-auto pb-2 font-mono text-[10px] text-muted">{Math.round(viewZoom * 100)}</div>
-          <RailIcon label="کوچک" onClick={() => setZoom(viewZoom - 0.1)}>
-            <ZoomOut className="size-4" />
-          </RailIcon>
-          <RailIcon label="بزرگ" onClick={() => setZoom(viewZoom + 0.1)}>
-            <ZoomIn className="size-4" />
-          </RailIcon>
+
+          <div className="mt-auto flex flex-col items-center gap-1 pt-3">
+            <RailIcon label="بزرگ‌نمایی" shortcut="Ctrl +" onClick={() => setZoom(viewZoom + 0.1)}>
+              <ZoomIn className="size-[18px]" />
+            </RailIcon>
+            <Tooltip content="اندازهٔ واقعی" shortcut="Ctrl 0">
+              <button
+                type="button"
+                onClick={() => setZoom(1)}
+                aria-label="اندازه واقعی"
+                className="tap num rounded-md px-1 py-1 text-[10px] text-muted hover:bg-elevated hover:text-fg"
+              >
+                {Math.round(viewZoom * 100)}%
+              </button>
+            </Tooltip>
+            <RailIcon label="کوچک‌نمایی" shortcut="Ctrl −" onClick={() => setZoom(viewZoom - 0.1)}>
+              <ZoomOut className="size-[18px]" />
+            </RailIcon>
+          </div>
         </aside>
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -495,53 +684,75 @@ export function EditorView({ id }: { id: string }) {
       </div>
 
       {selected && !wantEdit && (
-        <div className="flex shrink-0 items-center gap-1 border-t border-line bg-surface px-2 py-1 lg:hidden">
-          <button
-            type="button"
-            className="h-11 flex-1 rounded-md text-xs"
-            onClick={() => {
-              if (!selected) return;
-              if (selected.type === "bubble" || selected.type === "text") requestEdit(selected.id);
-              else if (selected.type === "panel") openSheet("media");
-              else openSheet("style");
-            }}
-          >
-            {selected.type === "video" ? "برش ویدئو" : selected.type === "image" ? "زوم عکس" : selected.type === "panel" ? "رسانه" : selected.type === "bubble" || selected.type === "text" ? "نوشتن" : "ویرایش"}
-          </button>
-          {selected.type === "panel" && (
-            <button type="button" className="h-11 flex-1 rounded-md text-xs" onClick={() => openSheet("style")}>
-              شکل قاب
-            </button>
-          )}
-          {(selected.type === "image" || selected.type === "video") && (
-            <>
-              <button
-                type="button"
-                className="h-11 w-11 shrink-0 rounded-md text-lg"
-                aria-label="کوچک‌کردن"
-                onClick={() => useStudio.getState().scaleSelectedMedia(1 / 1.22)}
-              >
-                −
-              </button>
-              <button
-                type="button"
-                className="h-11 w-11 shrink-0 rounded-md text-lg"
-                aria-label="بزرگ‌کردن"
-                onClick={() => useStudio.getState().scaleSelectedMedia(1.22)}
-              >
-                +
-              </button>
-            </>
-          )}
-          <button type="button" className="h-11 flex-1 rounded-md text-xs" onClick={() => openSheet("style")}>
-            استایل
-          </button>
-          <button type="button" className="h-11 flex-1 rounded-md text-xs" onClick={duplicateSelected}>
-            کپی
-          </button>
-          <button type="button" className="h-11 flex-1 rounded-md text-xs text-danger" onClick={deleteSelected}>
-            حذف
-          </button>
+        <div className="shrink-0 border-t border-line bg-surface/95 px-2 py-2 backdrop-blur-md lg:hidden">
+          <div className="rail-x rail-fade no-scrollbar items-center">
+            <span className="flex h-10 items-center rounded-full bg-elevated px-3 text-[11px] font-semibold text-muted">
+              {ITEM_NAMES[selected.type] ?? "انتخاب"}
+            </span>
+            <ActionChip
+              icon={
+                selected.type === "video" ? (
+                  <Film />
+                ) : selected.type === "image" ? (
+                  <Image />
+                ) : selected.type === "panel" ? (
+                  <ImagePlus />
+                ) : selected.type === "bubble" || selected.type === "text" ? (
+                  <Type />
+                ) : (
+                  <Palette />
+                )
+              }
+              primary
+              onClick={() => {
+                if (!selected) return;
+                if (selected.type === "bubble" || selected.type === "text")
+                  requestEdit(selected.id);
+                else if (selected.type === "panel") openSheet("media");
+                else openSheet("style");
+              }}
+            >
+              {selected.type === "video"
+                ? "برش ویدئو"
+                : selected.type === "image"
+                  ? "زوم عکس"
+                  : selected.type === "panel"
+                    ? "رسانه"
+                    : selected.type === "bubble" || selected.type === "text"
+                      ? "نوشتن"
+                      : "ویرایش"}
+            </ActionChip>
+            {selected.type === "panel" && (
+              <ActionChip icon={<SquareDashed />} onClick={() => openSheet("style")}>
+                شکل قاب
+              </ActionChip>
+            )}
+            {(selected.type === "image" || selected.type === "video") && (
+              <>
+                <ActionChip
+                  icon={<Minus />}
+                  iconOnly
+                  label="کوچک‌کردن"
+                  onClick={() => useStudio.getState().scaleSelectedMedia(1 / 1.22)}
+                />
+                <ActionChip
+                  icon={<Plus />}
+                  iconOnly
+                  label="بزرگ‌کردن"
+                  onClick={() => useStudio.getState().scaleSelectedMedia(1.22)}
+                />
+              </>
+            )}
+            <ActionChip icon={<Palette />} onClick={() => openSheet("style")}>
+              استایل
+            </ActionChip>
+            <ActionChip icon={<Copy />} onClick={duplicateSelected}>
+              کپی
+            </ActionChip>
+            <ActionChip icon={<Trash2 />} danger onClick={deleteSelected}>
+              حذف
+            </ActionChip>
+          </div>
         </div>
       )}
 
@@ -558,25 +769,44 @@ export function EditorView({ id }: { id: string }) {
         <NavBtn label="صدا" active={sheet === "audio"} onClick={() => openSheet("audio")}>
           <Music className="size-5" />
         </NavBtn>
-        <NavBtn label="قلم" active={tool === "draw" || sheet === "draw"} onClick={() => { setTool("draw"); openSheet("draw"); }}>
+        <NavBtn
+          label="قلم"
+          active={tool === "draw" || sheet === "draw"}
+          onClick={() => {
+            setTool("draw");
+            openSheet("draw");
+          }}
+        >
           <Pencil className="size-5" />
         </NavBtn>
-        <NavBtn label="لایه" active={sheet === "layers"} onClick={() => openSheet("layers", "layers")}>
+        <NavBtn
+          label="لایه"
+          active={sheet === "layers"}
+          onClick={() => openSheet("layers", "layers")}
+        >
           <Layers className="size-5" />
         </NavBtn>
       </nav>
 
-      <BottomSheet open={sheet === "add"} onOpenChange={(v) => setSheet(v ? "add" : null)} title="افزودن">
+      <BottomSheet
+        open={sheet === "add"}
+        onOpenChange={(v) => setSheet(v ? "add" : null)}
+        title="افزودن"
+      >
         <div className="space-y-4 pt-1">
           <PageBackgroundPicker onPickImage={() => pick("image", undefined, "bg")} />
           <div>
             <div className="mb-1.5 text-xs font-semibold">چیدمان قاب‌های این صفحه</div>
-            <p className="mb-2 text-[11px] text-muted">یک قالب بزن، بعد هر قاب را جدا جابه‌جا یا عوض کن.</p>
+            <p className="mb-2 text-[11px] text-muted">
+              یک قالب بزن، بعد هر قاب را جدا جابه‌جا یا عوض کن.
+            </p>
             <LayoutGrid />
           </div>
           <div>
             <div className="mb-1.5 text-xs font-semibold">شکل قاب تازه</div>
-            <p className="mb-2 text-[11px] text-muted">مثلث، برش مورب، دایره و بقیه. روی صفحه هم می‌توانی بکشیش.</p>
+            <p className="mb-2 text-[11px] text-muted">
+              مثلث، برش مورب، دایره و بقیه. روی صفحه هم می‌توانی بکشیش.
+            </p>
             <PanelKindGrid
               onPick={(k: PanelKind) => {
                 addPanel({ kind: k });
@@ -584,7 +814,7 @@ export function EditorView({ id }: { id: string }) {
             />
             <button
               type="button"
-              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-md bg-elevated text-sm"
+              className="tap mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-elevated text-sm font-medium shadow-[var(--shadow-border)] hover:bg-overlay"
               onClick={() => {
                 setTool("panel");
                 setSheet(null);
@@ -595,14 +825,41 @@ export function EditorView({ id }: { id: string }) {
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <SheetAction onClick={() => { addPage(); setSheet(null); }}>صفحه تازه</SheetAction>
-            <SheetAction onClick={() => { addPanel(); }}>قاب تازه در همین صفحه</SheetAction>
-            <SheetAction onClick={() => { openSheet("pages", "pages"); }}>صفحه‌ها</SheetAction>
-            <SheetAction onClick={() => { addText(); }}>متن</SheetAction>
+            <SheetAction
+              onClick={() => {
+                addPage();
+                setSheet(null);
+              }}
+            >
+              صفحه تازه
+            </SheetAction>
+            <SheetAction
+              onClick={() => {
+                addPanel();
+              }}
+            >
+              قاب تازه در همین صفحه
+            </SheetAction>
+            <SheetAction
+              onClick={() => {
+                openSheet("pages", "pages");
+              }}
+            >
+              صفحه‌ها
+            </SheetAction>
+            <SheetAction
+              onClick={() => {
+                addText();
+              }}
+            >
+              متن
+            </SheetAction>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {SHAPES.map((s) => (
-              <SheetAction key={s.k} onClick={() => addShape(s.k)}>{s.n}</SheetAction>
+              <SheetAction key={s.k} onClick={() => addShape(s.k)}>
+                {s.n}
+              </SheetAction>
             ))}
           </div>
         </div>
@@ -620,12 +877,13 @@ export function EditorView({ id }: { id: string }) {
       >
         <div className="space-y-3 pt-1">
           <p className="text-xs text-muted">
-            قاب را انتخاب کن، بعد فایل بگذار. روی عکس داخل قاب بکش تا جایش عوض شود؛ دو انگشت بزرگ‌نمایی است. ویدئو بعد از گذاشتن برش می‌شود.
+            قاب را انتخاب کن، بعد فایل بگذار. روی عکس داخل قاب بکش تا جایش عوض شود؛ دو انگشت
+            بزرگ‌نمایی است. ویدئو بعد از گذاشتن برش می‌شود.
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg bg-elevated text-sm shadow-[var(--shadow-border)]"
+              className="tap flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated text-sm font-medium shadow-[var(--shadow-border)] hover:bg-overlay [&_svg]:text-brand"
               onClick={() => {
                 pick("image");
                 setSheet(null);
@@ -636,7 +894,7 @@ export function EditorView({ id }: { id: string }) {
             </button>
             <button
               type="button"
-              className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg bg-elevated text-sm shadow-[var(--shadow-border)]"
+              className="tap flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated text-sm font-medium shadow-[var(--shadow-border)] hover:bg-overlay [&_svg]:text-brand"
               onClick={() => {
                 pick("video");
                 setSheet(null);
@@ -647,7 +905,7 @@ export function EditorView({ id }: { id: string }) {
             </button>
             <button
               type="button"
-              className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg bg-elevated text-sm shadow-[var(--shadow-border)]"
+              className="tap flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated text-sm font-medium shadow-[var(--shadow-border)] hover:bg-overlay [&_svg]:text-brand"
               onClick={() => {
                 pick("image", undefined, "free");
                 setSheet(null);
@@ -658,7 +916,7 @@ export function EditorView({ id }: { id: string }) {
             </button>
             <button
               type="button"
-              className="flex h-16 flex-col items-center justify-center gap-1 rounded-lg bg-elevated text-sm shadow-[var(--shadow-border)]"
+              className="tap flex h-20 flex-col items-center justify-center gap-1.5 rounded-xl bg-elevated text-sm font-medium shadow-[var(--shadow-border)] hover:bg-overlay [&_svg]:text-brand"
               onClick={() => {
                 pick("video", undefined, "free");
                 setSheet(null);
@@ -679,7 +937,7 @@ export function EditorView({ id }: { id: string }) {
                     <button
                       key={a.id}
                       type="button"
-                      className="relative aspect-square overflow-hidden rounded-md bg-elevated"
+                      className="tap relative aspect-square overflow-hidden rounded-lg bg-elevated shadow-[var(--shadow-border)]"
                       title={a.name}
                       onClick={() => {
                         useStudio.getState().placeAsset(a.id);
@@ -694,7 +952,9 @@ export function EditorView({ id }: { id: string }) {
                         </span>
                       )}
                       {a.kind === "video" && (
-                        <span className="absolute bottom-1 start-1 rounded bg-bg/80 px-1 text-[9px]">ویدئو</span>
+                        <span className="absolute bottom-1 start-1 rounded bg-bg/80 px-1 text-[9px]">
+                          ویدئو
+                        </span>
                       )}
                     </button>
                   ))}
@@ -739,9 +999,13 @@ export function EditorView({ id }: { id: string }) {
           <div className="space-y-3 pt-1">
             <p className="text-xs text-muted">متن را بنویس، بعد دکمه ثبت را بزن.</p>
             <textarea
-              className="min-h-28 w-full resize-none rounded-md bg-bg p-3 text-base shadow-[var(--shadow-border)]"
+              className="min-h-32 w-full resize-none rounded-lg bg-bg p-3 text-base leading-relaxed shadow-[var(--shadow-border)] focus-visible:shadow-[0_0_0_1px_var(--color-brand)]"
               value={selected.text}
-              onChange={(e) => useStudio.getState().patchItem(selected.id, { text: e.target.value } as never, false)}
+              onChange={(e) =>
+                useStudio
+                  .getState()
+                  .patchItem(selected.id, { text: e.target.value } as never, false)
+              }
               placeholder="اینجا بنویس…"
             />
             <Button
@@ -785,22 +1049,66 @@ export function EditorView({ id }: { id: string }) {
           </Button>
         }
       >
-        <div className="space-y-4 pt-2">
-          <label className="block text-xs text-muted">رنگ</label>
-          <input type="color" value={drawColor} onChange={(e) => setDrawColor(e.target.value)} className="h-11 w-full rounded-md bg-bg" />
+        <div className="space-y-4 pt-1">
           <div>
-            <div className="mb-2 text-xs text-muted">ضخامت {drawWidth}</div>
-            <Slider min={2} max={36} value={[drawWidth]} onValueChange={([v]) => setDrawWidth(v)} />
+            <div className="mb-2 text-xs font-semibold">رنگ قلم</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {INK_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  aria-label={c}
+                  onClick={() => setDrawColor(c)}
+                  style={{ background: c }}
+                  className={`tap size-9 rounded-full shadow-[var(--shadow-border)] ${
+                    drawColor.toLowerCase() === c.toLowerCase()
+                      ? "ring-2 ring-brand ring-offset-2 ring-offset-surface"
+                      : ""
+                  }`}
+                />
+              ))}
+              <label className="tap grid size-9 place-items-center overflow-hidden rounded-full bg-elevated shadow-[var(--shadow-border)]">
+                <input
+                  type="color"
+                  value={drawColor}
+                  onChange={(e) => setDrawColor(e.target.value)}
+                  className="size-12 cursor-pointer"
+                  aria-label="رنگ دلخواه"
+                />
+              </label>
+            </div>
           </div>
-          <p className="text-xs text-muted">روی صفحه بکش. برای خروج، بستن را بزن.</p>
+          <div>
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-semibold">ضخامت</span>
+              <span className="num text-muted">{drawWidth}px</span>
+            </div>
+            <Slider min={2} max={36} value={[drawWidth]} onValueChange={([v]) => setDrawWidth(v)} />
+            {/* Live preview of the stroke you are about to draw. */}
+            <div className="mt-3 grid h-12 place-items-center rounded-lg bg-bg">
+              <span
+                className="block w-4/5 rounded-full"
+                style={{ background: drawColor, height: Math.max(2, drawWidth) }}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted">روی صفحه بکش. برای خروج، «ثبت» را بزن.</p>
         </div>
       </BottomSheet>
 
-      <BottomSheet open={sheet === "pages"} onOpenChange={(v) => setSheet(v ? "pages" : null)} title="صفحه‌ها">
+      <BottomSheet
+        open={sheet === "pages"}
+        onOpenChange={(v) => setSheet(v ? "pages" : null)}
+        title="صفحه‌ها"
+      >
         <PageStrip variant="col" />
       </BottomSheet>
 
-      <BottomSheet open={sheet === "layers"} onOpenChange={(v) => setSheet(v ? "layers" : null)} title="لایه‌ها">
+      <BottomSheet
+        open={sheet === "layers"}
+        onOpenChange={(v) => setSheet(v ? "layers" : null)}
+        title="لایه‌ها"
+      >
         <Inspector
           mode="layers"
           hideTabs
@@ -842,7 +1150,9 @@ export function EditorView({ id }: { id: string }) {
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
         <DialogContent>
           <DialogTitle>ذخیره نشد</DialogTitle>
-          <DialogDescription>می‌توانی دوباره تلاش کنی، پرونده را خروجی بگیری، یا بدون ذخیره خارج شوی.</DialogDescription>
+          <DialogDescription>
+            می‌توانی دوباره تلاش کنی، پرونده را خروجی بگیری، یا بدون ذخیره خارج شوی.
+          </DialogDescription>
           <div className="mt-4 flex flex-col gap-2">
             <Button
               onClick={() => {
@@ -862,40 +1172,155 @@ export function EditorView({ id }: { id: string }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </div>
   );
 }
 
-function NavBtn({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
+const ITEM_NAMES: Record<string, string> = {
+  panel: "قاب",
+  image: "تصویر",
+  video: "ویدئو",
+  bubble: "حباب",
+  text: "متن",
+  shape: "شکل",
+  drawing: "خط قلم",
+};
+
+function SaveState({ tone, label }: { tone: "ok" | "warn" | "danger" | "idle"; label: string }) {
+  const dot =
+    tone === "danger"
+      ? "bg-danger"
+      : tone === "ok"
+        ? "bg-ok"
+        : tone === "warn"
+          ? "bg-warn"
+          : "bg-subtle";
+  return (
+    <span
+      className={`shrink-0 items-center gap-1.5 rounded-full bg-elevated px-2.5 py-1 text-[11px] ${
+        tone === "danger" ? "inline-flex text-danger" : "hidden text-muted sm:inline-flex"
+      }`}
+    >
+      <span className={`size-1.5 rounded-full ${dot} ${tone === "warn" ? "animate-pulse" : ""}`} />
+      {label}
+    </span>
+  );
+}
+
+function NavBtn({
+  label,
+  onClick,
+  active,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10px] ${active ? "text-fg" : "text-muted"}`}
+      aria-pressed={active}
+      className={`tap relative flex min-h-14 flex-col items-center justify-center gap-1 text-[10px] font-medium ${
+        active ? "text-brand" : "text-muted"
+      }`}
     >
+      {/* Active marker rides the top edge so the icon never shifts. */}
+      <span
+        className={`absolute inset-x-4 top-0 h-0.5 rounded-full bg-brand transition-opacity duration-200 ${
+          active ? "opacity-100" : "opacity-0"
+        }`}
+      />
       {children}
       {label}
     </button>
   );
 }
 
-function RailIcon({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
+function RailDivider() {
+  return <span className="my-1 h-px w-6 bg-line" />;
+}
+
+function RailIcon({
+  label,
+  shortcut,
+  onClick,
+  active,
+  children,
+}: {
+  label: string;
+  shortcut?: string;
+  onClick: () => void;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip content={label} shortcut={shortcut} side="left">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onClick}
+        className={`tap relative grid size-10 place-items-center rounded-lg ${
+          active ? "bg-brand/15 text-brand" : "text-muted hover:bg-elevated hover:text-fg"
+        }`}
+      >
+        {active && <span className="absolute inset-y-2 start-0 w-0.5 rounded-full bg-brand" />}
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
+function ActionChip({
+  icon,
+  children,
+  onClick,
+  primary,
+  danger,
+  iconOnly,
+  label,
+}: {
+  icon: React.ReactNode;
+  children?: React.ReactNode;
+  onClick: () => void;
+  primary?: boolean;
+  danger?: boolean;
+  iconOnly?: boolean;
+  label?: string;
+}) {
   return (
     <button
       type="button"
-      title={label}
-      aria-label={label}
       onClick={onClick}
-      className={`grid size-10 place-items-center rounded-md ${active ? "bg-select/30 text-select-fg" : "text-muted hover:text-fg"}`}
+      aria-label={label ?? undefined}
+      className={`tap flex h-10 items-center justify-center gap-1.5 rounded-full text-xs font-medium [&_svg]:size-4 ${
+        iconOnly ? "w-10 shrink-0" : "px-3.5"
+      } ${
+        primary
+          ? "bg-brand text-brand-fg"
+          : danger
+            ? "bg-danger/12 text-danger"
+            : "bg-elevated text-fg shadow-[var(--shadow-border)]"
+      }`}
     >
-      {children}
+      {icon}
+      {!iconOnly && children}
     </button>
   );
 }
 
 function SheetAction({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="h-12 rounded-lg bg-elevated text-sm shadow-[var(--shadow-border)]">
+    <button
+      type="button"
+      onClick={onClick}
+      className="tap flex h-12 items-center justify-center rounded-lg bg-elevated text-sm font-medium text-fg shadow-[var(--shadow-border)] hover:bg-overlay"
+    >
       {children}
     </button>
   );
