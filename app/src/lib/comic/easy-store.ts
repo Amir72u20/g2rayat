@@ -320,6 +320,12 @@ export const useEasy = create<EasyState>((set, get) => {
     setPerPage: (v) => commit({ perPage: v }),
     setGlobalPlan: (patch) => {
       const globalPlan = { ...get().globalPlan, ...patch };
+      // Switching to automatic panels drops any per-page template choices —
+      // otherwise a stale plan from earlier keeps drawing the old grid.
+      if (patch.layoutKey === AUTO_LAYOUT) {
+        commit({ globalPlan, plans: [], perPage: false });
+        return;
+      }
       commit({ globalPlan, plans: get().plans.map((p) => ({ ...p, ...patch })) });
     },
     setPagePlan: (index, patch) => {
@@ -329,7 +335,10 @@ export const useEasy = create<EasyState>((set, get) => {
     },
     pagePlans: () => {
       const { shots, plans, globalPlan, perPage } = get();
-      const base = perPage ? plans : [];
+      // Automatic panels are a whole-comic decision; per-page templates only
+      // apply while a ready-made layout is chosen.
+      const auto = globalPlan.layoutKey === AUTO_LAYOUT;
+      const base = perPage && !auto ? plans : [];
       const pages = planPages(shots.length, base, globalPlan);
       return pages.map((p) => ({ ...p }));
     },

@@ -410,9 +410,6 @@ export function ReaderView({ id }: { id: string }) {
 
   const pageCount = project.pages.length;
   const beatCount = Math.max(1, beats.length);
-  // Right-to-left comics run backwards through the page: "next" lives on the
-  // left, so the tap zones (and their hints) flip with the reading direction.
-  const rtlRead = project.readingDirection !== "ltr";
 
   return (
     <div className="relative h-dvh overflow-hidden bg-bg text-fg">
@@ -515,8 +512,9 @@ export function ReaderView({ id }: { id: string }) {
           if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
           const rect = e.currentTarget.getBoundingClientRect();
           const rel = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
-          const backZone = rtlRead ? rel > 0.72 : rel < 0.28;
-          if (backZone) back();
+          // Right side goes forward, left side goes back — in both reading
+          // directions, because it is the hand that matters here, not the text.
+          if (rel < 0.3) back();
           else forward();
         }}
       >
@@ -528,13 +526,13 @@ export function ReaderView({ id }: { id: string }) {
             <div className="pointer-events-none absolute inset-0 animate-in fade-in duration-500">
               <span
                 className="absolute top-1/2 -translate-y-1/2 rounded-full bg-bg/60 px-3 py-1.5 text-[11px] text-muted backdrop-blur-sm"
-                style={rtlRead ? { right: "6%" } : { left: "6%" }}
+                style={{ left: "6%" }}
               >
                 قبلی
               </span>
               <span
                 className="absolute top-1/2 -translate-y-1/2 rounded-full bg-bg/60 px-3 py-1.5 text-[11px] text-fg backdrop-blur-sm"
-                style={rtlRead ? { left: "6%" } : { right: "6%" }}
+                style={{ right: "6%" }}
               >
                 بعدی
               </span>
@@ -542,7 +540,7 @@ export function ReaderView({ id }: { id: string }) {
             <div className="pointer-events-none absolute inset-x-0 bottom-24 text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-bg/80 px-4 py-2 text-sm text-fg shadow-[var(--shadow-lift)] backdrop-blur-md">
                 <MousePointerClick className="size-4 text-brand" />
-                برای قاب بعدی روی صفحه بزن
+                سمت راست: قاب بعدی · سمت چپ: قاب قبلی
               </span>
             </div>
           </>

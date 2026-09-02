@@ -30,7 +30,7 @@ A four-step route (`/easy`) for making a comic without touching the studio, buil
 around the one thing that is genuinely hard on a phone: editing a picture after
 it is already clipped by a panel.
 
-1. **عکس‌ها** — pick images *and video clips* from the device or the local
+1. **عکس‌ها** — two buttons, «افزودن عکس» and «افزودن ویدئو», plus the local
    library; their order is the comic's panel order.
 2. **ویرایش تکی** — each picture is edited *outside* any panel, on a frame of its
    own: crop ratio, zoom and pan, colour grade (presets + brightness / contrast /
@@ -56,11 +56,12 @@ closest to the page wins — then every row fills the width and the rows are
 scaled together to fill the height. The page comes out full, with only the
 gutter between frames and a crop of a percent or two.
 
-For the ready-made layouts, two details make the frames land well: each panel
-shrinks to its picture's aspect so nothing is cropped away, then the page's
-panels grow together to fill the paper; and a last page with fewer pictures than
-cells switches to a layout that holds exactly what is left, so a comic never
-ends on an empty frame.
+Ready-made layouts keep their cells and let each picture fill the frame it was
+given — panels used to shrink to the picture's aspect, which left bands of empty
+paper between rows. A last page with fewer pictures than cells switches to a
+layout that holds exactly what is left, and any frame with nothing in it is
+dropped and the rest grown back over the page, so a comic never ends on an empty
+frame or a hole.
 
 Wizard state (including every frame) is kept in `sessionStorage`, so stepping
 back — or closing the tab by accident — does not lose the work.
@@ -168,4 +169,4 @@ Import remaps all IDs so an existing comic is never overwritten.
 | n (library) | New comic |
 | Reader: arrows / space | Previous / next |
 | Reader: a fresh clip | Holds the page for its first 2s — until the comic has been read once |
-| Reader: tap or click | Next — except the side third behind you, which goes back (follows the reading direction). Dragging never navigates. |
+| Reader: tap or click | Right side: next · left third: back. Dragging never navigates. |

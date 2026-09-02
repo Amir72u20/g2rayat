@@ -16,7 +16,8 @@ export function StepPick() {
   const addShot = useEasy((s) => s.addShot);
   const removeShot = useEasy((s) => s.removeShot);
   const moveShot = useEasy((s) => s.moveShot);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
   const [library, setLibrary] = useState<AssetMeta[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -68,21 +69,35 @@ export function StepPick() {
         />
       </div>
 
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        className="tap flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-6 py-8 text-center hover:border-brand/60 hover:bg-elevated"
-      >
-        <span className="grid size-12 place-items-center rounded-full bg-brand/12 text-brand">
-          <ImagePlus className="size-6" />
-        </span>
-        <span className="text-sm font-semibold">
-          {busy ? "در حال افزودن…" : "عکس یا ویدئو انتخاب کن"}
-        </span>
-        <span className="text-[11px] text-muted">
-          چند تا با هم — ترتیبشان همان ترتیب قاب‌های کمیک است.
-        </span>
-      </button>
+      {/* Two doors, not one: on a phone a combined picker often opens straight
+          into the photo album and a clip looks impossible to add. */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => imageRef.current?.click()}
+          className="tap flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-4 py-6 text-center hover:border-brand/60 hover:bg-elevated"
+        >
+          <span className="grid size-11 place-items-center rounded-full bg-brand/12 text-brand">
+            <ImagePlus className="size-5" />
+          </span>
+          <span className="text-sm font-semibold">{busy ? "در حال افزودن…" : "افزودن عکس"}</span>
+          <span className="text-[11px] text-muted">چند عکس با هم</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => videoRef.current?.click()}
+          className="tap flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line bg-surface px-4 py-6 text-center hover:border-brand/60 hover:bg-elevated"
+        >
+          <span className="grid size-11 place-items-center rounded-full bg-brand/12 text-brand">
+            <Film className="size-5" />
+          </span>
+          <span className="text-sm font-semibold">افزودن ویدئو</span>
+          <span className="text-[11px] text-muted">کلیپ کوتاه — بعداً برشش می‌زنی</span>
+        </button>
+      </div>
+      <p className="-mt-2 text-center text-[11px] text-muted">
+        ترتیب همین فهرست، ترتیب قاب‌های کمیک است.
+      </p>
 
       {shots.length > 0 && (
         <section>
@@ -219,9 +234,20 @@ export function StepPick() {
       )}
 
       <input
-        ref={fileRef}
+        ref={imageRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          void onFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={videoRef}
+        type="file"
+        accept="video/*,video/mp4,video/webm,video/quicktime"
         multiple
         className="hidden"
         onChange={(e) => {

@@ -297,16 +297,22 @@ export function mosaicRects(
   }
   const groups = best ?? [ratios.map((_, i) => i)];
 
-  const natural = rowsHeight(groups);
-  const scale = natural > 0 ? availH / natural : 1;
+  // Scale only the picture heights: the gutters between rows are fixed, so they
+  // must come out of the height budget before the rows are stretched to fill it.
+  const gapsY = gap * (groups.length - 1);
+  const naturalRows = rowsHeight(groups) - gapsY;
+  const scale = naturalRows > 0 ? (availH - gapsY) / naturalRows : 1;
   const rects: Rect[] = new Array(n);
   let y = margin;
-  for (const g of groups) {
+  groups.forEach((g, gi) => {
     const sum = g.reduce((acc, i) => acc + Math.max(0.2, ratios[i]), 0);
-    const rowH = ((availW - gap * (g.length - 1)) / sum) * scale;
+    // The last row takes whatever pixels rounding left, so the page ends flush.
+    const rowH =
+      gi === groups.length - 1
+        ? margin + availH - y
+        : ((availW - gap * (g.length - 1)) / sum) * scale;
     let x = margin;
     g.forEach((i, k) => {
-      // Last frame in the row takes the rounding slack so the row ends flush.
       const w =
         k === g.length - 1
           ? margin + availW - x
@@ -315,7 +321,7 @@ export function mosaicRects(
       x += w + gap;
     });
     y += rowH + gap;
-  }
+  });
   return rects;
 }
 
@@ -478,7 +484,6 @@ export function buildEasyProject(opts: BuildOptions): ComicProject {
       page.items.filter((i): i is PanelItem => i.type === "panel"),
       opts.direction,
     );
-    // Pass one: shape every panel around the picture it will hold.
     const filled: { panel: PanelItem; shot: EasyShot }[] = [];
     panels.forEach((panel, order) => {
       panel.kind = plan.panelKind;
@@ -487,10 +492,10 @@ export function buildEasyProject(opts: BuildOptions): ComicProject {
       const shot = opts.shots[cursor];
       if (!shot) return;
       cursor++;
-      fitPanelToRatio(panel, shot.frame.w / shot.frame.h);
       filled.push({ panel, shot });
     });
-    // A frame with nothing in it reads as a mistake, so drop the leftovers.
+    // A frame with nothing in it reads as a mistake, so drop the leftovers, then
+    // close the hole they left by growing the rest back over the page.
     page.items = page.items.filter(
       (i) => i.type !== "panel" || filled.some((f) => f.panel.id === i.id),
     );
@@ -498,7 +503,8 @@ export function buildEasyProject(opts: BuildOptions): ComicProject {
       page,
       filled.map((f) => f.panel),
     );
-    // Pass two: pour each picture (and its bubbles) into its finished panel.
+    // Panels keep their cells; the picture fills the frame it was given, so the
+    // page never ends up with bands of empty paper between rows.
     filled.forEach(({ panel, shot }) => placeShotInPanel(page, panel, shot));
     if (opts.music && pageIndex === 0) page.playback.ambientAudio = musicToClip(opts.music);
     pages.push(page);
@@ -559,11 +565,14 @@ function buildAutoPage(
 /** Copy one finished frame — picture and bubbles — into its panel. */
 function placeShotInPanel(page: ComicPage, panel: PanelItem, shot: EasyShot) {
   const frame = shot.frame;
-  const scale = panel.w / frame.w;
+  // Bubbles were placed on a frame of one aspect and land in a panel of another;
+  // scaling by the smaller axis keeps them inside the frame they were drawn in.
+  const scale = Math.min(panel.w / frame.w, panel.h / frame.h);
   const src = shotMedia(shot);
   if (src) {
     const placed = {
       ...src,
+      fitMode: "fill" as const,
       id: uid("i"),
       x: panel.x,
       y: panel.y,
@@ -576,16 +585,18 @@ function placeShotInPanel(page: ComicPage, panel: PanelItem, shot: EasyShot) {
     } as ImageItem | VideoItem;
     insertItem(page, placed);
   }
+  const offX = panel.x + (panel.w - frame.w * scale) / 2;
+  const offY = panel.y + (panel.h - frame.h * scale) / 2;
   shotBubbles(shot).forEach((b) => {
     const copy: BubbleItem = {
       ...b,
       id: uid("i"),
-      x: panel.x + b.x * scale,
-      y: panel.y + b.y * scale,
+      x: offX + b.x * scale,
+      y: offY + b.y * scale,
       w: b.w * scale,
       h: b.h * scale,
-      tx: panel.x + b.tx * scale,
-      ty: panel.y + b.ty * scale,
+      tx: offX + b.tx * scale,
+      ty: offY + b.ty * scale,
       font: Math.max(10, Math.round(b.font * scale)),
       stroke: Math.max(0, b.stroke * scale),
       radius: b.radius * scale,
