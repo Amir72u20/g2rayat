@@ -52,6 +52,7 @@ function RouterNav({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const go: GoFn = (to, params) => {
     if (to === "/") void navigate({ to: "/" });
+    else if (to === "/easy") void navigate({ to: "/easy" });
     else if (to === "/studio/$id") void navigate({ to: "/studio/$id", params: { id: params!.id } });
     else void navigate({ to: "/read/$id", params: { id: params!.id } });
   };

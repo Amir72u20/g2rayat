@@ -7,6 +7,7 @@ import type {
   ComicItem,
   ComicPage,
   DrawingItem,
+  ImageAdjust,
   ImageItem,
   PanelItem,
   ShapeItem,
@@ -224,10 +225,34 @@ function mediaFrame(
   }
 }
 
+/** Canvas filter string for an image's colour grade — "" when it is neutral. */
+export function adjustFilter(adjust?: ImageAdjust | null) {
+  if (!adjust) return "";
+  const parts: string[] = [];
+  if (adjust.brightness !== 1) parts.push(`brightness(${adjust.brightness})`);
+  if (adjust.contrast !== 1) parts.push(`contrast(${adjust.contrast})`);
+  if (adjust.saturate !== 1) parts.push(`saturate(${adjust.saturate})`);
+  // Warm leans on sepia; cool rotates hue toward blue. Both stay cheap enough
+  // to run on every frame of the editor canvas.
+  if (adjust.warmth > 0) parts.push(`sepia(${(adjust.warmth * 0.55).toFixed(3)})`);
+  else if (adjust.warmth < 0) parts.push(`hue-rotate(${Math.round(adjust.warmth * 22)}deg)`);
+  return parts.join(" ");
+}
+
 function drawImage(ctx: CanvasRenderingContext2D, it: ImageItem, media: MediaBag, page: ComicPage) {
   const img = media.images[it.assetId];
   const sz = sourceSize(img);
+  const filter = adjustFilter(it.adjust);
+  if (!filter) {
+    mediaFrame(ctx, it, img || null, sz.w, sz.h, page);
+    return;
+  }
+  ctx.save();
+  // Older canvases ignore ctx.filter; the image then draws ungraded rather than
+  // not at all, which is the right way to lose this feature.
+  ctx.filter = filter;
   mediaFrame(ctx, it, img || null, sz.w, sz.h, page);
+  ctx.restore();
 }
 
 function drawVideo(ctx: CanvasRenderingContext2D, it: VideoItem, media: MediaBag, page: ComicPage) {

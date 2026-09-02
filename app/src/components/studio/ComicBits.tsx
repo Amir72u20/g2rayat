@@ -52,21 +52,38 @@ export function LayoutThumb({ layout, className }: { layout: PanelLayout; classN
   );
 }
 
-export function LayoutGrid({ onPick }: { onPick?: (key: string) => void }) {
+export function LayoutGrid({
+  onPick,
+  value,
+  className,
+}: {
+  onPick?: (key: string) => void;
+  /** Marks one layout as the current choice (used by the easy builder). */
+  value?: string;
+  className?: string;
+}) {
   const applyLayoutKey = useStudio((s) => s.applyLayoutKey);
   return (
-    <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5">
-      {PANEL_LAYOUTS.map((L) => (
-        <button
-          key={L.k}
-          type="button"
-          title={L.n}
-          onClick={() => (onPick ? onPick(L.k) : applyLayoutKey(L.k))}
-          className="tap flex h-14 flex-col items-center justify-center rounded-lg bg-elevated p-1.5 text-muted shadow-[var(--shadow-border)] hover:bg-overlay hover:text-fg"
-        >
-          <LayoutThumb layout={L} />
-        </button>
-      ))}
+    <div className={cn("grid grid-cols-4 gap-1.5 sm:grid-cols-5", className)}>
+      {PANEL_LAYOUTS.map((L) => {
+        const active = value === L.k;
+        return (
+          <button
+            key={L.k}
+            type="button"
+            title={L.n}
+            onClick={() => (onPick ? onPick(L.k) : applyLayoutKey(L.k))}
+            className={cn(
+              "tap flex h-14 flex-col items-center justify-center rounded-lg p-1.5",
+              active
+                ? "bg-brand/15 text-brand shadow-[0_0_0_1.5px_var(--color-brand)]"
+                : "bg-elevated text-muted shadow-[var(--shadow-border)] hover:bg-overlay hover:text-fg",
+            )}
+          >
+            <LayoutThumb layout={L} />
+          </button>
+        );
+      })}
     </div>
   );
 }

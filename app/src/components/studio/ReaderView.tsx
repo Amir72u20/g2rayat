@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppNav } from "@/lib/comic/nav";
 import { BookOpen, Maximize2, MousePointerClick, Pause, Play, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { applyTone } from "@/lib/comic/audio-graph";
 import { drawPage } from "@/lib/comic/draw";
 import { collectAssetIds, ensureAllUrls, getProject, mediaUrl } from "@/lib/comic/db";
 import {
@@ -23,7 +24,6 @@ import {
   revealedItemIds,
   revealCamera,
   retreatReveal,
-  swipeDirection,
   type Beat,
   type CameraRect,
 } from "@/lib/comic/reader";
@@ -54,7 +54,7 @@ export function ReaderView({ id }: { id: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const ambient = useRef<HTMLAudioElement | null>(null);
   const hideTimer = useRef<number | null>(null);
-  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const press = useRef<{ x: number; y: number } | null>(null);
   const camAnim = useRef<CamAnim | null>(null);
   const camNow = useRef<CameraRect | null>(null);
   const fade = useRef({ ids: [] as string[], t0: 0 });
@@ -183,6 +183,8 @@ export function ReaderView({ id }: { id: string }) {
     const a = ambient.current;
     const src = mediaUrl(clip.assetId);
     if (a.src !== src) a.src = src;
+    // Speed and tone come from the easy builder's music panel.
+    applyTone(a, { speed: clip.speed, bass: clip.bass, treble: clip.treble });
     a.loop = !clip.end || clip.throughPage === -1 || !!clip.continuePages;
     a.currentTime = Math.min(a.currentTime || clip.start, clip.start || 0) || clip.start;
     const fadeIn = Math.max(0, clip.fadeInMs || 0);
@@ -430,37 +432,29 @@ export function ReaderView({ id }: { id: string }) {
         </div>
       </div>
 
+      {/* Reading is click-driven: a tap or click on the forward side opens the
+          next beat, the side you came from goes back. A drag does nothing, so
+          holding the page or dragging by accident never skips a panel. */}
       <div
         ref={wrapRef}
         className="absolute inset-0"
         onPointerDown={(e) => {
           if ((e.target as HTMLElement).closest("button, a, [role='button']")) return;
-          swipe.current = { x: e.clientX, y: e.clientY };
+          press.current = { x: e.clientX, y: e.clientY };
         }}
         onPointerUp={(e) => {
           if ((e.target as HTMLElement).closest("button, a, [role='button']")) return;
           if (ended) return;
-          const start = swipe.current;
-          swipe.current = null;
+          const start = press.current;
+          press.current = null;
           if (!start) return;
-          const dx = e.clientX - start.x;
-          const dy = e.clientY - start.y;
-          const dir = swipeDirection(dx, dy, 72);
-          if (dir === "next") {
-            forward();
-            return;
-          }
-          if (dir === "prev") {
-            back();
-            return;
-          }
-          if (Math.abs(dx) < 16 && Math.abs(dy) < 16) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const rel = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
-            const backZone = rtlRead ? rel > 0.72 : rel < 0.28;
-            if (backZone) back();
-            else forward();
-          }
+          // Anything that travelled is a drag, not a click.
+          if (Math.abs(e.clientX - start.x) > 12 || Math.abs(e.clientY - start.y) > 12) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const rel = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
+          const backZone = rtlRead ? rel > 0.72 : rel < 0.28;
+          if (backZone) back();
+          else forward();
         }}
       >
         <canvas ref={canvasRef} className="block size-full touch-none" />
@@ -485,7 +479,7 @@ export function ReaderView({ id }: { id: string }) {
             <div className="pointer-events-none absolute inset-x-0 bottom-24 text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-bg/80 px-4 py-2 text-sm text-fg shadow-[var(--shadow-lift)] backdrop-blur-md">
                 <MousePointerClick className="size-4 text-brand" />
-                بزن یا بکش تا قاب بعدی باز شود
+                برای قاب بعدی روی صفحه بزن
               </span>
             </div>
           </>

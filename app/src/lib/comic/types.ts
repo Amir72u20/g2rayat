@@ -1,20 +1,6 @@
-export type ItemType =
-  | "panel"
-  | "image"
-  | "video"
-  | "bubble"
-  | "text"
-  | "shape"
-  | "drawing";
+export type ItemType = "panel" | "image" | "video" | "bubble" | "text" | "shape" | "drawing";
 
-export type BubbleKind =
-  | "round"
-  | "rect"
-  | "think"
-  | "shout"
-  | "caption"
-  | "whisper"
-  | "none";
+export type BubbleKind = "round" | "rect" | "think" | "shout" | "caption" | "whisper" | "none";
 
 export type ShapeKind = "rect" | "round" | "circle" | "line" | "arrow";
 
@@ -43,7 +29,8 @@ export type FitMode = "fill" | "fit";
 
 export type InspectorTab = "props" | "pages" | "layers" | "export";
 
-export type StudioSheet = "add" | "pages" | "layers" | "style" | "draw" | "bubble" | "media" | "audio";
+export type StudioSheet =
+  "add" | "pages" | "layers" | "style" | "draw" | "bubble" | "media" | "audio";
 
 export type EditorTool = "select" | "draw" | "pan" | "panel";
 
@@ -54,6 +41,12 @@ export interface AudioClip {
   volume: number;
   fadeInMs: number;
   fadeOutMs: number;
+  /** Playback rate, 1 = original. */
+  speed?: number;
+  /** Low-shelf gain in dB, -12…+12. */
+  bass?: number;
+  /** High-shelf gain in dB, -12…+12. */
+  treble?: number;
   continuePages?: boolean;
   /** 1-based page number to keep playing through; -1 = rest of comic; 0/omit = this page only */
   throughPage?: number;
@@ -98,8 +91,26 @@ export interface PanelItem extends BaseItem {
   story: PanelStory;
 }
 
+/** Per-image colour grade, applied by the renderer as a canvas filter. */
+export interface ImageAdjust {
+  /** 1 = untouched for the first three. */
+  brightness: number;
+  contrast: number;
+  saturate: number;
+  /** -1 (cool) … 1 (warm). */
+  warmth: number;
+}
+
+export const NEUTRAL_ADJUST: ImageAdjust = {
+  brightness: 1,
+  contrast: 1,
+  saturate: 1,
+  warmth: 0,
+};
+
 export interface ImageItem extends BaseItem {
   type: "image";
+  adjust?: ImageAdjust;
   assetId: string;
   zoom: number;
   cropX: number;
@@ -208,13 +219,7 @@ export interface DrawingItem extends BaseItem {
 }
 
 export type ComicItem =
-  | PanelItem
-  | ImageItem
-  | VideoItem
-  | BubbleItem
-  | TextItem
-  | ShapeItem
-  | DrawingItem;
+  PanelItem | ImageItem | VideoItem | BubbleItem | TextItem | ShapeItem | DrawingItem;
 
 export interface PageBackground {
   color: string;

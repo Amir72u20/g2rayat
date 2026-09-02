@@ -12,6 +12,8 @@ Standalone Persian comic studio: create pages, place images/video, add speech bu
 ## Architecture
 
 - `src/lib/comic/types.ts` — document model (discriminated unions)
+- `src/lib/comic/easy.ts` — easy builder: frames, panel fitting, project build
+- `src/lib/comic/easy-store.ts` — wizard state (session-persisted)
 - `src/lib/comic/store.ts` — editor state, history, autosave
 - `src/lib/comic/repository.ts` — storage adapters (`ComicRepository`, `AssetRepository`)
 - `src/lib/comic/db.ts` — IndexedDB implementation
@@ -21,6 +23,34 @@ Standalone Persian comic studio: create pages, place images/video, add speech bu
 - `src/components/ui/` — primitives (button, select, segmented, sheet, dialog…)
 - `src/styles.css` — design tokens, materials, platform behaviour
 - `src/lib/theme.ts` — dark / light / system theme, applied before first paint
+
+## Easy builder («ساخت آسان»)
+
+A four-step route (`/easy`) for making a comic without touching the studio, built
+around the one thing that is genuinely hard on a phone: editing a picture after
+it is already clipped by a panel.
+
+1. **عکس‌ها** — pick images from the device or the local library; their order is
+   the comic's panel order.
+2. **ویرایش تکی** — each picture is edited *outside* any panel, on a frame of its
+   own: crop ratio, zoom and pan, colour grade (presets + brightness / contrast /
+   saturation / warmth), and speech bubbles with nine skins from classic white to
+   glass and smoke. The film strip below switches pictures.
+3. **پنل و موسیقی** — layout and panel shape, either one setting for the whole
+   comic or per page, plus background music with volume, playback speed, bass and
+   treble (Web Audio shelf filters), fade in/out, and how far through the comic it
+   plays.
+4. **پیش‌نمایش** — the built comic, page by page, with a pencil on every page that
+   opens just that page's settings. Nothing is baked: the wizard writes normal
+   panels, images and bubbles, so everything stays editable in the studio.
+
+Two details that make the frames land well: each panel shrinks to its picture's
+aspect so nothing is cropped away, then the page's panels grow together to fill
+the paper; and a last page with fewer pictures than cells switches to a layout
+that holds exactly what is left, so a comic never ends on an empty frame.
+
+Wizard state (including every frame) is kept in `sessionStorage`, so stepping
+back — or closing the tab by accident — does not lose the work.
 
 ## Design system
 
@@ -73,6 +103,14 @@ never hard-code a colour, radius, shadow or easing.
 - Keyboard: `/` focuses library search, `n` starts a comic, and the editor
   shortcuts below.
 
+## Canvas behaviour
+
+Items move freely: they may bleed off the page, overlap, or grow past it, and the
+only limit is that a grabbable sliver stays on paper. Order comes from magnetic
+alignment instead — while `snap` is on, an item's edges and centre pull to the
+page's edges/centre *and* to every other item on the page, with the guide drawn
+only while the pull is active.
+
 ## Persistence
 
 Projects and blobs live in IndexedDB (`kader-studio`). Preferences (snap, default page size, reading direction) use `localStorage`. Autosave is debounced (~700ms). `Ctrl/Cmd+S` flushes immediately.
@@ -108,5 +146,4 @@ Import remaps all IDs so an existing comic is never overwritten.
 | / (library) | Focus search |
 | n (library) | New comic |
 | Reader: arrows / space | Previous / next |
-| Reader: tap or click | Next — except the side third behind you, which goes back (follows the reading direction) |
-| Reader: swipe | Previous / next |
+| Reader: tap or click | Next — except the side third behind you, which goes back (follows the reading direction). Dragging never navigates. |

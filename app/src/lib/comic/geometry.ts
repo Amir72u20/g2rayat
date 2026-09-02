@@ -9,19 +9,29 @@ export function itemCenter(it: ComicItem) {
 export function contains(it: ComicItem, x: number, y: number) {
   if (it.type === "panel") return pointInPanel(it, x, y);
   if (it.type === "shape" && (it.kind === "line" || it.kind === "arrow")) {
-    return pointSegDist(x, y, it.x, it.y, it.x + it.w, it.y + it.h) < Math.max(14, (it.stroke ?? 6) + 10);
+    return (
+      pointSegDist(x, y, it.x, it.y, it.x + it.w, it.y + it.h) < Math.max(14, (it.stroke ?? 6) + 10)
+    );
   }
   if (it.type === "drawing") {
     const pts = it.points;
     for (let i = 1; i < pts.length; i++) {
-      if (pointSegDist(x, y, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y) < it.width + 10) return true;
+      if (pointSegDist(x, y, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y) < it.width + 10)
+        return true;
     }
     return false;
   }
   return x >= it.x && x <= it.x + it.w && y >= it.y && y <= it.y + it.h;
 }
 
-export function pointSegDist(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+export function pointSegDist(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+) {
   const dx = bx - ax;
   const dy = by - ay;
   const len = dx * dx + dy * dy || 1;
@@ -29,19 +39,28 @@ export function pointSegDist(px: number, py: number, ax: number, ay: number, bx:
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+/**
+ * Free placement with a light keeper.
+ *
+ * Anything may hang off the page, bleed past its edges, or grow larger than the
+ * page — the only rule is that a grabbable sliver stays on paper, so nothing can
+ * be dragged into a place you cannot reach again.
+ */
 export function clampItem(it: ComicItem, page: ComicPage) {
   if (it.type === "drawing") {
     it.points = it.points.map((p) => ({
-      x: clamp(p.x, 0, page.w),
-      y: clamp(p.y, 0, page.h),
+      x: clamp(p.x, -page.w * 0.5, page.w * 1.5),
+      y: clamp(p.y, -page.h * 0.5, page.h * 1.5),
     }));
     refreshDrawingBounds(it);
     return;
   }
-  it.w = clamp(it.w, 24, page.w);
-  it.h = clamp(it.h, 24, page.h);
-  it.x = clamp(it.x, -it.w * 0.4, page.w - it.w * 0.6);
-  it.y = clamp(it.y, -it.h * 0.4, page.h - it.h * 0.6);
+  it.w = clamp(it.w, 24, page.w * 3);
+  it.h = clamp(it.h, 24, page.h * 3);
+  const keepX = Math.min(56, it.w * 0.25);
+  const keepY = Math.min(56, it.h * 0.25);
+  it.x = clamp(it.x, -it.w + keepX, page.w - keepX);
+  it.y = clamp(it.y, -it.h + keepY, page.h - keepY);
 }
 
 export function refreshDrawingBounds(it: ComicItem) {
@@ -105,7 +124,11 @@ export function applyRotate(it: ComicItem, pt: { x: number; y: number }, snap15:
   it.rot = Math.round(deg);
 }
 
-export function resizeCorner(pt: { x: number; y: number }, it: ComicItem, hs: number): HandleCorner | null {
+export function resizeCorner(
+  pt: { x: number; y: number },
+  it: ComicItem,
+  hs: number,
+): HandleCorner | null {
   if (it.type !== "panel") {
     const rh = rotateHandlePoint(it, hs);
     if (Math.hypot(pt.x - rh.x, pt.y - rh.y) < hs * 0.7) return "rot";
@@ -167,57 +190,93 @@ export function applyResize(
   it.h = h;
 }
 
+/**
+ * Magnetic alignment, not a grid.
+ *
+ * Candidate lines come from the page (edges + centre) and from every other item
+ * on it, so a panel lines up with its neighbours as easily as with the page.
+ * Nothing is forced: outside the threshold the item goes exactly where it was
+ * dragged, and the returned guides are only drawn while a snap is active.
+ */
 export function snapItem(it: ComicItem, page: ComicPage, enabled: boolean) {
   if (!enabled || it.locked) return { x: null as number | null, y: null as number | null };
   const threshold = Math.max(10, Math.min(26, page.w * 0.018));
-  const cx = it.x + it.w / 2;
-  const cy = it.y + it.h / 2;
-  let gx: number | null = null;
-  let gy: number | null = null;
+
+  const xLines = [0, page.w / 2, page.w];
+  const yLines = [0, page.h / 2, page.h];
+  for (const other of page.items) {
+    if (other.id === it.id || other.hidden) continue;
+    // A panel's own children ride along with it — they are not alignment targets.
+    if (other.panelId === it.id) continue;
+    xLines.push(other.x, other.x + other.w / 2, other.x + other.w);
+    yLines.push(other.y, other.y + other.h / 2, other.y + other.h);
+  }
+
   const beforeX = it.x;
   const beforeY = it.y;
-  if (Math.abs(cx - page.w / 2) <= threshold) {
-    it.x = page.w / 2 - it.w / 2;
-    gx = page.w / 2;
-  } else if (Math.abs(it.x) <= threshold) {
-    it.x = 0;
-    gx = 0;
-  } else if (Math.abs(it.x + it.w - page.w) <= threshold) {
-    it.x = page.w - it.w;
-    gx = page.w;
-  }
-  if (Math.abs(cy - page.h / 2) <= threshold) {
-    it.y = page.h / 2 - it.h / 2;
-    gy = page.h / 2;
-  } else if (Math.abs(it.y) <= threshold) {
-    it.y = 0;
-    gy = 0;
-  } else if (Math.abs(it.y + it.h - page.h) <= threshold) {
-    it.y = page.h - it.h;
-    gy = page.h;
-  }
+
+  const best = (edges: number[], lines: number[]) => {
+    let shift = 0;
+    let line: number | null = null;
+    let dist = threshold;
+    for (const edge of edges) {
+      for (const candidate of lines) {
+        const d = Math.abs(edge - candidate);
+        if (d < dist) {
+          dist = d;
+          shift = candidate - edge;
+          line = candidate;
+        }
+      }
+    }
+    return { shift, line };
+  };
+
+  const sx = best([it.x, it.x + it.w / 2, it.x + it.w], xLines);
+  const sy = best([it.y, it.y + it.h / 2, it.y + it.h], yLines);
+  it.x += sx.shift;
+  it.y += sy.shift;
+
   const sdx = it.x - beforeX;
   const sdy = it.y - beforeY;
-  if (it.type === "panel" && (sdx || sdy)) {
-    page.items
-      .filter((c) => c.panelId === it.id)
-      .forEach((c) => {
-        c.x += sdx;
-        c.y += sdy;
-        if (c.type === "bubble") {
-          c.tx += sdx;
-          c.ty += sdy;
-        }
-      });
+  if (sdx || sdy) {
+    if (it.type === "bubble") {
+      it.tx += sdx;
+      it.ty += sdy;
+    }
+    if (it.type === "drawing") {
+      it.points = it.points.map((p) => ({ x: p.x + sdx, y: p.y + sdy }));
+    }
+    if (it.type === "panel") {
+      page.items
+        .filter((c) => c.panelId === it.id)
+        .forEach((c) => {
+          c.x += sdx;
+          c.y += sdy;
+          if (c.type === "bubble") {
+            c.tx += sdx;
+            c.ty += sdy;
+          }
+          if (c.type === "drawing") {
+            c.points = c.points.map((p) => ({ x: p.x + sdx, y: p.y + sdy }));
+          }
+        });
+    }
   }
-  return { x: gx, y: gy };
+  return { x: sx.line, y: sy.line };
 }
 
-export function isFramedMedia(it: ComicItem | null | undefined): it is Extract<ComicItem, { type: "image" | "video" }> {
+export function isFramedMedia(
+  it: ComicItem | null | undefined,
+): it is Extract<ComicItem, { type: "image" | "video" }> {
   return !!it && (it.type === "image" || it.type === "video") && !!it.panelId && !it.free;
 }
 
-export function panCrop(it: Extract<ComicItem, { type: "image" | "video" }>, dx: number, dy: number) {
+export function panCrop(
+  it: Extract<ComicItem, { type: "image" | "video" }>,
+  dx: number,
+  dy: number,
+) {
   if ((it.zoom || 1) < 1.2 && (dx || dy)) it.zoom = Math.max(it.zoom || 1, 1.2);
   const spanX = Math.max(64, it.w * 0.55);
   const spanY = Math.max(64, it.h * 0.55);

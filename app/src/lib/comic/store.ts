@@ -45,7 +45,15 @@ import {
   newVideo,
   addPanelToPage,
 } from "./factory";
-import { clampItem, moveItem, panelAt, isFramedMedia, scaleFromCenter, bumpMediaZoom } from "./geometry";
+import {
+  clampItem,
+  moveItem,
+  panelAt,
+  isFramedMedia,
+  scaleFromCenter,
+  bumpMediaZoom,
+} from "./geometry";
+import { kindOf, makeThumb, probeMedia } from "./asset-intake";
 import { loadImageAsset, loadVideoAsset } from "./media-cache";
 import { seedSampleIfNeeded } from "./sample";
 import { exportProjectPackage, importProjectPackage } from "./package";
@@ -151,7 +159,11 @@ interface StudioState {
 
   importFiles: (
     files: File[],
-    opts?: { target?: "page" | "panel" | "free" | "bg" | "audio" | "panel-audio"; panelId?: string; replaceId?: string },
+    opts?: {
+      target?: "page" | "panel" | "free" | "bg" | "audio" | "panel-audio";
+      panelId?: string;
+      replaceId?: string;
+    },
   ) => Promise<void>;
   addBubble: (kind?: BubbleKind) => void;
   addText: () => void;
@@ -168,7 +180,7 @@ function snapshot(s: StudioState): HistorySnap {
     pages: structuredClone(s.project?.pages ?? []),
     pageIndex: s.pageIndex,
     translations: structuredClone(s.project?.translations ?? {}),
-    readingDirection: s.project?.readingDirection ?? "rtl"
+    readingDirection: s.project?.readingDirection ?? "rtl",
   };
 }
 function restore(s: StudioState, snap: HistorySnap) {
@@ -237,79 +249,6 @@ function scheduleSave(get: () => StudioState) {
     get().saveNow();
   }, 700);
 }
-async function makeThumb(file: File, kind: AssetKind): Promise<Blob | undefined> {
-  if (kind === "audio") return undefined;
-  if (kind === "image") {
-    const bmp = await createImageBitmap(file);
-    const cv = document.createElement("canvas");
-    const scale = 360 / Math.max(bmp.width, bmp.height);
-    cv.width = Math.max(1, Math.round(bmp.width * scale));
-    cv.height = Math.max(1, Math.round(bmp.height * scale));
-    const ctx = cv.getContext("2d");
-    if (!ctx) return undefined;
-    ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
-    return await new Promise((res) => cv.toBlob((b) => res(b || undefined), "image/jpeg", .82));
-  }
-  return undefined;
-}
-async function probeMedia(file: File, kind: AssetKind) {
-  const url = URL.createObjectURL(file);
-  try {
-    if (kind === "image") {
-      const img = new Image();
-      await Promise.race([
-        new Promise<void>((resolve, reject) => {
-          img.onload = () => resolve();
-          img.onerror = () => reject();
-          img.src = url;
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 4000)),
-      ]);
-      return {
-        width: img.naturalWidth || undefined,
-        height: img.naturalHeight || undefined,
-        duration: undefined as number | undefined,
-      };
-    }
-    if (kind === "video" || kind === "audio") {
-      const el = document.createElement(kind === "video" ? "video" : "audio");
-      el.preload = "metadata";
-      await Promise.race([
-        new Promise<void>((resolve) => {
-          el.onloadedmetadata = () => resolve();
-          el.onerror = () => resolve();
-          el.src = url;
-        }),
-        new Promise<void>((resolve) => setTimeout(resolve, 3500)),
-      ]);
-      const vid = el as HTMLVideoElement;
-      return {
-        width: kind === "video" ? vid.videoWidth || undefined : undefined,
-        height: kind === "video" ? vid.videoHeight || undefined : undefined,
-        duration: Number.isFinite(el.duration) ? el.duration : 0,
-      };
-    }
-  } catch {
-    /* ignore */
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-  return {
-    width: undefined as number | undefined,
-    height: undefined as number | undefined,
-    duration: undefined as number | undefined,
-  };
-}
-function kindOf(file: File): AssetKind | null {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/")) return "audio";
-  const n = file.name.toLowerCase();
-  if (/\.(png|jpe?g|webp|gif)$/.test(n)) return "image";
-  if (/\.(mp4|webm|mov)$/.test(n)) return "video";
-  if (/\.(mp3|wav|ogg|m4a|flac)$/.test(n)) return "audio";
-  return null;
-}
 function layoutCount(key: string) {
   return layoutCellCount(key);
 }
@@ -353,7 +292,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         library,
         assets,
         ready: true,
-        snap: prefs.snap
+        snap: prefs.snap,
       });
     })();
     try {
@@ -366,7 +305,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     const [library, assets] = await Promise.all([indexedDbComics.list(), listAssets()]);
     set({
       library,
-      assets
+      assets,
     });
   },
   openProject: async (id) => {
@@ -397,14 +336,17 @@ export const useStudio = create<StudioState>((set, get) => ({
       inspectorTab: "props",
       sheet: null,
       mediaTick: Date.now(),
-      tool: "select"
+      tool: "select",
     });
     ensureAllUrls(collectAssetIds(project)).then(() => set({ mediaTick: Date.now() }));
   },
   closeProject: () => {
     const { dirty, project } = get();
     persistSession(project, true);
-    if (dirty && project) void get().saveNow().catch(() => undefined);
+    if (dirty && project)
+      void get()
+        .saveNow()
+        .catch(() => undefined);
   },
   createProject: async (title, opts) => {
     const project = newProject(title, opts);
@@ -463,7 +405,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: { ...p },
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -474,7 +416,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: { ...p },
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -486,22 +428,23 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: { ...p },
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
   setTab: (t) => set({ inspectorTab: t }),
   setSheet: (s) => set({ sheet: s }),
-  setTool: (t) => set({
-    tool: t,
-    sheet: t === "draw" ? "draw" : get().sheet === "draw" ? null : get().sheet
-  }),
-  setZoom: (z) => set({ viewZoom: clamp(z, .25, 4) }),
+  setTool: (t) =>
+    set({
+      tool: t,
+      sheet: t === "draw" ? "draw" : get().sheet === "draw" ? null : get().sheet,
+    }),
+  setZoom: (z) => set({ viewZoom: clamp(z, 0.25, 4) }),
   setSnap: (v) => {
     set({ snap: v });
     savePrefs({
       ...loadPrefs(),
-      snap: v
+      snap: v,
     });
   },
   setDrawColor: (c) => set({ drawColor: c }),
@@ -510,7 +453,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       selectedId: id,
       inspectorTab: id ? "props" : get().inspectorTab,
-      cropArmed: id ? get().cropArmed : false
+      cropArmed: id ? get().cropArmed : false,
     });
   },
   cyclePanels: (dir) => {
@@ -518,15 +461,19 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (!page) return;
     const panels = page.items.filter((i) => i.type === "panel");
     if (!panels.length) return;
-    const next = panels[(panels.findIndex((p) => p.id === get().selectedId) + dir + panels.length) % panels.length];
+    const next =
+      panels[
+        (panels.findIndex((p) => p.id === get().selectedId) + dir + panels.length) % panels.length
+      ];
     get().select(next.id);
   },
   requestEdit: (id) => set({ wantEdit: id }),
-  armCrop: (v) => set({
-    cropArmed: v,
-    tool: v ? "select" : get().tool,
-    sheet: v ? null : get().sheet
-  }),
+  armCrop: (v) =>
+    set({
+      cropArmed: v,
+      tool: v ? "select" : get().tool,
+      sheet: v ? null : get().sheet,
+    }),
   page: () => {
     const p = get().project;
     if (!p || !p.pages.length) return null;
@@ -543,7 +490,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (!s.project) return;
     set({
       undo: [...s.undo, snapshot(s)].slice(-50),
-      redo: []
+      redo: [],
     });
   },
   undoAction: () => {
@@ -559,7 +506,7 @@ export const useStudio = create<StudioState>((set, get) => ({
       redo,
       selectedId: null,
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -576,7 +523,7 @@ export const useStudio = create<StudioState>((set, get) => ({
       undo,
       selectedId: null,
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -592,11 +539,11 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       dirty: true,
       saveStatus: "unsaved",
-      liveGen: get().liveGen + 1
+      liveGen: get().liveGen + 1,
     });
     scheduleSave(get);
   },
@@ -612,11 +559,11 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       dirty: true,
       saveStatus: "unsaved",
-      liveGen: get().liveGen + 1
+      liveGen: get().liveGen + 1,
     });
     scheduleSave(get);
   },
@@ -701,11 +648,12 @@ export const useStudio = create<StudioState>((set, get) => ({
     const page = get().page();
     if (!p || !page) return;
     const img = page.items.find((i) => i.type === "image");
-    p.coverAssetId = img && img.type === "image" ? img.assetId : page.background.assetId || p.coverAssetId;
+    p.coverAssetId =
+      img && img.type === "image" ? img.assetId : page.background.assetId || p.coverAssetId;
     set({
       project: { ...p },
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
     toast.success("جلد از این صفحه گرفته شد");
@@ -716,7 +664,9 @@ export const useStudio = create<StudioState>((set, get) => ({
     get().patchItem(it.id, { locked: !it.locked }, true);
   },
   toggleHidden: (id) => {
-    const it = get().page()?.items.find((x) => x.id === id);
+    const it = get()
+      .page()
+      ?.items.find((x) => x.id === id);
     if (!it) return;
     get().patchItem(id, { hidden: !it.hidden }, true);
   },
@@ -738,13 +688,13 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       pageIndex: p.pages.length - 1,
       selectedId: null,
       dirty: true,
       saveStatus: "unsaved",
-      sheet: null
+      sheet: null,
     });
     scheduleSave(get);
   },
@@ -758,12 +708,12 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       pageIndex: get().pageIndex + 1,
       selectedId: null,
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -778,12 +728,12 @@ export const useStudio = create<StudioState>((set, get) => ({
       set({
         project: {
           ...p,
-          pages: [...p.pages]
+          pages: [...p.pages],
         },
         pageIndex: 0,
         selectedId: null,
         dirty: true,
-        saveStatus: "unsaved"
+        saveStatus: "unsaved",
       });
       scheduleSave(get);
       return;
@@ -793,12 +743,12 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       pageIndex: idx,
       selectedId: null,
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -808,7 +758,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       pageIndex: clamp(i, 0, p.pages.length - 1),
       selectedId: null,
-      liveGen: get().liveGen + 1
+      liveGen: get().liveGen + 1,
     });
   },
   movePage: (from, to) => {
@@ -821,11 +771,11 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       pageIndex: to,
       dirty: true,
-      saveStatus: "unsaved"
+      saveStatus: "unsaved",
     });
     scheduleSave(get);
   },
@@ -849,10 +799,11 @@ export const useStudio = create<StudioState>((set, get) => ({
           it.tx *= sx;
           it.ty *= sy;
         }
-        if (it.type === "drawing") it.points = it.points.map((pt) => ({
-          x: pt.x * sx,
-          y: pt.y * sy
-        }));
+        if (it.type === "drawing")
+          it.points = it.points.map((pt) => ({
+            x: pt.x * sx,
+            y: pt.y * sy,
+          }));
       });
     });
   },
@@ -875,7 +826,7 @@ export const useStudio = create<StudioState>((set, get) => ({
     });
     set({
       selectedId: null,
-      sheet: null
+      sheet: null,
     });
   },
   addPanel: (extra) => {
@@ -883,12 +834,13 @@ export const useStudio = create<StudioState>((set, get) => ({
     get().touchPage((pg) => {
       nid = addPanelToPage(pg, extra).id;
     });
-    if (nid) set({
-      selectedId: nid,
-      inspectorTab: "props",
-      sheet: extra?.x != null || extra?.kind ? get().sheet : null,
-      tool: extra?.x != null ? get().tool : "select"
-    });
+    if (nid)
+      set({
+        selectedId: nid,
+        inspectorTab: "props",
+        sheet: extra?.x != null || extra?.kind ? get().sheet : null,
+        tool: extra?.x != null ? get().tool : "select",
+      });
     if (extra?.x == null) toast.success("قاب تازه روی همین صفحه");
   },
   setAmbientThrough: (endPageIndex) => {
@@ -905,11 +857,11 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       dirty: true,
       saveStatus: "unsaved",
-      liveGen: get().liveGen + 1
+      liveGen: get().liveGen + 1,
     });
     scheduleSave(get);
   },
@@ -924,11 +876,11 @@ export const useStudio = create<StudioState>((set, get) => ({
     set({
       project: {
         ...p,
-        pages: [...p.pages]
+        pages: [...p.pages],
       },
       dirty: true,
       saveStatus: "unsaved",
-      liveGen: get().liveGen + 1
+      liveGen: get().liveGen + 1,
     });
     scheduleSave(get);
   },
@@ -970,169 +922,193 @@ export const useStudio = create<StudioState>((set, get) => ({
     }
     const imported: { meta: AssetRecord; kind: AssetKind }[] = [];
     for (const file of files) {
-        const kind = kindOf(file);
-        if (!kind) {
-          toast.message(`این فایل پشتیبانی نمی‌شود: ${file.name}`);
-          continue;
-        }
-        const rec: AssetRecord = {
-          id: uid("a"),
-          kind,
-          name: file.name,
-          mime: file.type || "application/octet-stream",
-          size: file.size,
-          createdAt: Date.now(),
-          blob: file
-        };
-        adoptBlobUrl(rec.id, file);
-        imported.push({
-          meta: rec,
-          kind
-        });
-        (async () => {
-          try {
-            const probe = await probeMedia(file, kind);
-            rec.width = probe.width;
-            rec.height = probe.height;
-            rec.duration = probe.duration;
-            rec.thumb = await makeThumb(file, kind).catch(() => undefined);
-            await putAsset(rec);
-            const p = get().project;
-            if (p && rec.duration) {
-              for (const pg of p.pages) for (const it of pg.items) if (it.type === "video" && it.assetId === rec.id) {
-                it.duration = rec.duration || 0;
-                if (!it.trimEnd) it.trimEnd = rec.duration || 0;
-                it.sourceRatio = (rec.width || 16) / Math.max(1, rec.height || 9);
-              }
-              set({
-                project: {
-                  ...p,
-                  pages: [...p.pages]
-                },
-                mediaTick: Date.now()
-              });
-            }
-            get().refreshLibrary();
-          } catch (e) {
-            console.error(e);
+      const kind = kindOf(file);
+      if (!kind) {
+        toast.message(`این فایل پشتیبانی نمی‌شود: ${file.name}`);
+        continue;
+      }
+      const rec: AssetRecord = {
+        id: uid("a"),
+        kind,
+        name: file.name,
+        mime: file.type || "application/octet-stream",
+        size: file.size,
+        createdAt: Date.now(),
+        blob: file,
+      };
+      adoptBlobUrl(rec.id, file);
+      imported.push({
+        meta: rec,
+        kind,
+      });
+      (async () => {
+        try {
+          const probe = await probeMedia(file, kind);
+          rec.width = probe.width;
+          rec.height = probe.height;
+          rec.duration = probe.duration;
+          rec.thumb = await makeThumb(file, kind).catch(() => undefined);
+          await putAsset(rec);
+          const p = get().project;
+          if (p && rec.duration) {
+            for (const pg of p.pages)
+              for (const it of pg.items)
+                if (it.type === "video" && it.assetId === rec.id) {
+                  it.duration = rec.duration || 0;
+                  if (!it.trimEnd) it.trimEnd = rec.duration || 0;
+                  it.sourceRatio = (rec.width || 16) / Math.max(1, rec.height || 9);
+                }
+            set({
+              project: {
+                ...p,
+                pages: [...p.pages],
+              },
+              mediaTick: Date.now(),
+            });
           }
-        })();
-      }
-      if (!imported.length) return;
-      const target = opts.target || "page";
-      if (target === "bg") {
-        const img = imported.find((i) => i.kind === "image");
-        if (img) {
-          get().touchPage((pg) => {
-            pg.background.assetId = img.meta.id;
-            pg.background.zoom = 1;
-            pg.background.x = 0;
-            pg.background.y = 0;
-          });
-          loadImageAsset(img.meta.id, () => set({ mediaTick: Date.now() }));
+          get().refreshLibrary();
+        } catch (e) {
+          console.error(e);
         }
-        return;
+      })();
+    }
+    if (!imported.length) return;
+    const target = opts.target || "page";
+    if (target === "bg") {
+      const img = imported.find((i) => i.kind === "image");
+      if (img) {
+        get().touchPage((pg) => {
+          pg.background.assetId = img.meta.id;
+          pg.background.zoom = 1;
+          pg.background.x = 0;
+          pg.background.y = 0;
+        });
+        loadImageAsset(img.meta.id, () => set({ mediaTick: Date.now() }));
       }
-      if (target === "audio") {
-        const aud = imported.find((i) => i.kind === "audio");
-        if (aud) get().touchPage((pg) => {
+      return;
+    }
+    if (target === "audio") {
+      const aud = imported.find((i) => i.kind === "audio");
+      if (aud)
+        get().touchPage((pg) => {
           pg.playback.ambientAudio = {
-            ...newAudio(aud.meta.id, .35),
+            ...newAudio(aud.meta.id, 0.35),
             continuePages: false,
-            throughPage: 0
+            throughPage: 0,
           };
         });
-        toast.success("موسیقی گذاشته شد — خط راست را بکش تا بگی تا کجا پخش شود");
-        return;
-      }
-      if (target === "panel-audio") {
-        const aud = imported.find((i) => i.kind === "audio");
-        const sel = get().selected();
-        if (aud && sel && (sel.type === "panel" || sel.type === "image" || sel.type === "video")) get().touchPage((pg) => {
+      toast.success("موسیقی گذاشته شد — خط راست را بکش تا بگی تا کجا پخش شود");
+      return;
+    }
+    if (target === "panel-audio") {
+      const aud = imported.find((i) => i.kind === "audio");
+      const sel = get().selected();
+      if (aud && sel && (sel.type === "panel" || sel.type === "image" || sel.type === "video"))
+        get().touchPage((pg) => {
           const it = pg.items.find((x) => x.id === sel.id);
           if (it && (it.type === "panel" || it.type === "image" || it.type === "video")) {
             it.story = it.story || {
               order: 1,
               reveal: "click",
               delayMs: 1e3,
-              audio: null
+              audio: null,
             };
             it.story.audio = newAudio(aud.meta.id, 1);
           }
         });
-        return;
-      }
-      let lastId = "";
-      get().touchPage((pg) => {
-        for (const item of imported) {
-          if (item.kind === "audio") {
-            pg.playback.ambientAudio = newAudio(item.meta.id, .35);
+      return;
+    }
+    let lastId = "";
+    get().touchPage((pg) => {
+      for (const item of imported) {
+        if (item.kind === "audio") {
+          pg.playback.ambientAudio = newAudio(item.meta.id, 0.35);
+          continue;
+        }
+        if (opts.replaceId) {
+          const existing = pg.items.find((x) => x.id === opts.replaceId);
+          if (existing && (existing.type === "image" || existing.type === "video")) {
+            existing.assetId = item.meta.id;
+            lastId = existing.id;
             continue;
           }
-          if (opts.replaceId) {
-            const existing = pg.items.find((x) => x.id === opts.replaceId);
-            if (existing && (existing.type === "image" || existing.type === "video")) {
-              existing.assetId = item.meta.id;
-              lastId = existing.id;
-              continue;
-            }
-          }
-          const selectedNow = get().selected();
-          const panel = target === "free" ? null : (opts.panelId && pg.items.find((x) => x.id === opts.panelId && x.type === "panel")) || (selectedNow?.type === "panel" ? pg.items.find((x) => x.id === selectedNow.id && x.type === "panel") : null) || (selectedNow && (selectedNow.type === "image" || selectedNow.type === "video") && selectedNow.panelId && !selectedNow.free ? pg.items.find((x) => x.id === selectedNow.panelId && x.type === "panel") : null) || (target === "panel" ? panelAt(pg, pg.w / 2, pg.h / 2) : null);
-          if (item.kind === "image") {
-            const img = newImage(pg, item.meta.id, { sourceRatio: (item.meta.width || 1) / Math.max(1, item.meta.height || 1) });
-            if (panel && panel.type === "panel") attachMediaToPanel(pg, img, panel);
-            else placeFreeMedia(pg, img);
-            insertItem(pg, img);
-            lastId = img.id;
-            loadImageAsset(item.meta.id, () => set({ mediaTick: Date.now() }));
-          }
-          if (item.kind === "video") {
-            const vid = newVideo(pg, item.meta.id, {
-              duration: item.meta.duration || 0,
-              trimEnd: item.meta.duration || 0,
-              sourceRatio: (item.meta.width || 16) / Math.max(1, item.meta.height || 9),
-              aspectLock: false
-            });
-            if (panel && panel.type === "panel") attachMediaToPanel(pg, vid, panel);
-            else placeFreeMedia(pg, vid);
-            insertItem(pg, vid);
-            lastId = vid.id;
-            loadVideoAsset(item.meta.id, () => set({ mediaTick: Date.now() }));
-          }
         }
-      });
-      if (lastId) set({
+        const selectedNow = get().selected();
+        const panel =
+          target === "free"
+            ? null
+            : (opts.panelId && pg.items.find((x) => x.id === opts.panelId && x.type === "panel")) ||
+              (selectedNow?.type === "panel"
+                ? pg.items.find((x) => x.id === selectedNow.id && x.type === "panel")
+                : null) ||
+              (selectedNow &&
+              (selectedNow.type === "image" || selectedNow.type === "video") &&
+              selectedNow.panelId &&
+              !selectedNow.free
+                ? pg.items.find((x) => x.id === selectedNow.panelId && x.type === "panel")
+                : null) ||
+              (target === "panel" ? panelAt(pg, pg.w / 2, pg.h / 2) : null);
+        if (item.kind === "image") {
+          const img = newImage(pg, item.meta.id, {
+            sourceRatio: (item.meta.width || 1) / Math.max(1, item.meta.height || 1),
+          });
+          if (panel && panel.type === "panel") attachMediaToPanel(pg, img, panel);
+          else placeFreeMedia(pg, img);
+          insertItem(pg, img);
+          lastId = img.id;
+          loadImageAsset(item.meta.id, () => set({ mediaTick: Date.now() }));
+        }
+        if (item.kind === "video") {
+          const vid = newVideo(pg, item.meta.id, {
+            duration: item.meta.duration || 0,
+            trimEnd: item.meta.duration || 0,
+            sourceRatio: (item.meta.width || 16) / Math.max(1, item.meta.height || 9),
+            aspectLock: false,
+          });
+          if (panel && panel.type === "panel") attachMediaToPanel(pg, vid, panel);
+          else placeFreeMedia(pg, vid);
+          insertItem(pg, vid);
+          lastId = vid.id;
+          loadVideoAsset(item.meta.id, () => set({ mediaTick: Date.now() }));
+        }
+      }
+    });
+    if (lastId)
+      set({
         selectedId: lastId,
         inspectorTab: "props",
-        tool: "select"
+        tool: "select",
       });
-      toast.success("به صفحه اضافه شد");
+    toast.success("به صفحه اضافه شد");
   },
   addBubble: (kind = "round") => {
     let nid = "";
     get().touchPage((pg) => {
       const b = newBubble(pg, kind);
-      const panel = get().selected()?.type === "panel" ? get().selected() : panelAt(pg, b.x + b.w / 2, b.y + b.h / 2);
+      const panel =
+        get().selected()?.type === "panel"
+          ? get().selected()
+          : panelAt(pg, b.x + b.w / 2, b.y + b.h / 2);
       if (panel && panel.type === "panel") {
         b.panelId = panel.id;
-        b.x = panel.x + panel.w * .12;
-        b.y = panel.y + panel.h * .08;
-        b.w = panel.w * .76;
-        b.h = Math.min(panel.h * .38, pg.h * .18);
-        b.tx = b.x + b.w * .25;
+        b.x = panel.x + panel.w * 0.12;
+        b.y = panel.y + panel.h * 0.08;
+        b.w = panel.w * 0.76;
+        b.h = Math.min(panel.h * 0.38, pg.h * 0.18);
+        b.tx = b.x + b.w * 0.25;
         b.ty = b.y + b.h + 70;
       }
       insertItem(pg, b);
       nid = b.id;
     });
-    if (nid) set({
-      selectedId: nid,
-      inspectorTab: "props",
-      wantEdit: nid,
-      sheet: null,
-      tool: "select"
-    });
+    if (nid)
+      set({
+        selectedId: nid,
+        inspectorTab: "props",
+        wantEdit: nid,
+        sheet: null,
+        tool: "select",
+      });
   },
   addText: () => {
     let nid = "";
@@ -1141,13 +1117,14 @@ export const useStudio = create<StudioState>((set, get) => ({
       insertItem(pg, t);
       nid = t.id;
     });
-    if (nid) set({
-      selectedId: nid,
-      inspectorTab: "props",
-      wantEdit: nid,
-      sheet: null,
-      tool: "select"
-    });
+    if (nid)
+      set({
+        selectedId: nid,
+        inspectorTab: "props",
+        wantEdit: nid,
+        sheet: null,
+        tool: "select",
+      });
   },
   addShape: (kind) => {
     let nid = "";
@@ -1156,30 +1133,35 @@ export const useStudio = create<StudioState>((set, get) => ({
       insertItem(pg, s);
       nid = s.id;
     });
-    if (nid) set({
-      selectedId: nid,
-      inspectorTab: "props",
-      sheet: null,
-      tool: "select"
-    });
+    if (nid)
+      set({
+        selectedId: nid,
+        inspectorTab: "props",
+        sheet: null,
+        tool: "select",
+      });
   },
   startDrawing: () => {
     if (!get().page()) return null;
     const d = newDrawing({
       color: get().drawColor,
-      width: get().drawWidth
+      width: get().drawWidth,
     });
     get().touchPage((pg) => insertItem(pg, d));
     set({
       selectedId: d.id,
-      tool: "draw"
+      tool: "draw",
     });
     return d;
   },
   fillEmptyPanels: (assetIds) => {
     get().touchPage((pg) => {
       const panels = pg.items.filter((i) => i.type === "panel");
-      const used = new Set(pg.items.filter((i) => (i.type === "image" || i.type === "video") && i.panelId).map((i) => i.panelId));
+      const used = new Set(
+        pg.items
+          .filter((i) => (i.type === "image" || i.type === "video") && i.panelId)
+          .map((i) => i.panelId),
+      );
       let ai = 0;
       for (const panel of panels) {
         if (used.has(panel.id) || ai >= assetIds.length) continue;
@@ -1205,7 +1187,7 @@ export const useStudio = create<StudioState>((set, get) => ({
               order: 1,
               reveal: "click",
               delayMs: 1e3,
-              audio: null
+              audio: null,
             };
             it.story.audio = newAudio(a.id, 1);
           }
@@ -1215,8 +1197,8 @@ export const useStudio = create<StudioState>((set, get) => ({
       }
       get().touchPage((pg) => {
         pg.playback.ambientAudio = {
-          ...newAudio(a.id, .35),
-          continuePages: false
+          ...newAudio(a.id, 0.35),
+          continuePages: false,
         };
       });
       toast.success("موسیقی صفحه گذاشته شد");
@@ -1226,7 +1208,9 @@ export const useStudio = create<StudioState>((set, get) => ({
     let nid = "";
     get().touchPage((pg) => {
       const sel = get().selected();
-      const ratio = (a.width || (a.kind === "video" ? 16 : 1)) / Math.max(1, a.height || (a.kind === "video" ? 9 : 1));
+      const ratio =
+        (a.width || (a.kind === "video" ? 16 : 1)) /
+        Math.max(1, a.height || (a.kind === "video" ? 9 : 1));
       if (sel && (sel.type === "image" || sel.type === "video") && sel.type === a.kind) {
         const existing = pg.items.find((x) => x.id === sel.id);
         if (existing && (existing.type === "image" || existing.type === "video")) {
@@ -1241,9 +1225,16 @@ export const useStudio = create<StudioState>((set, get) => ({
           return;
         }
       }
-      const panel = (sel?.type === "panel" ? pg.items.find((x) => x.id === sel.id && x.type === "panel") : null) || (sel?.panelId ? pg.items.find((x) => x.id === sel.panelId && x.type === "panel") : null) || panelAt(pg, pg.w / 2, pg.h / 2);
+      const panel =
+        (sel?.type === "panel"
+          ? pg.items.find((x) => x.id === sel.id && x.type === "panel")
+          : null) ||
+        (sel?.panelId ? pg.items.find((x) => x.id === sel.panelId && x.type === "panel") : null) ||
+        panelAt(pg, pg.w / 2, pg.h / 2);
       if (panel && panel.type === "panel") {
-        const framed = pg.items.find((i) => i.panelId === panel.id && (i.type === "image" || i.type === "video") && !i.free);
+        const framed = pg.items.find(
+          (i) => i.panelId === panel.id && (i.type === "image" || i.type === "video") && !i.free,
+        );
         if (framed) pg.items = pg.items.filter((x) => x.id !== framed.id);
       }
       if (a.kind === "image") {
@@ -1256,7 +1247,7 @@ export const useStudio = create<StudioState>((set, get) => ({
         const vid = newVideo(pg, a.id, {
           duration: a.duration || 0,
           trimEnd: a.duration || 0,
-          sourceRatio: ratio
+          sourceRatio: ratio,
         });
         if (panel && panel.type === "panel") attachMediaToPanel(pg, vid, panel);
         else vid.free = true;
@@ -1264,11 +1255,12 @@ export const useStudio = create<StudioState>((set, get) => ({
         nid = vid.id;
       }
     });
-    if (nid) set({
-      selectedId: nid,
-      inspectorTab: "props",
-      tool: "select"
-    });
+    if (nid)
+      set({
+        selectedId: nid,
+        inspectorTab: "props",
+        tool: "select",
+      });
     toast.success("به صفحه اضافه شد");
   },
   saveNow: async () => {
@@ -1276,7 +1268,10 @@ export const useStudio = create<StudioState>((set, get) => ({
     if (!p) return;
     set({ saveStatus: "saving" });
     p.updatedAt = Date.now();
-    p.coverAssetId = p.coverAssetId || p.pages[0]?.items.find((i) => i.type === "image")?.assetId || p.pages[0]?.background.assetId;
+    p.coverAssetId =
+      p.coverAssetId ||
+      p.pages[0]?.items.find((i) => i.type === "image")?.assetId ||
+      p.pages[0]?.background.assetId;
     try {
       await indexedDbComics.save(p);
       persistSession(p, true);
@@ -1284,19 +1279,19 @@ export const useStudio = create<StudioState>((set, get) => ({
         dirty: false,
         saveStatus: "saved",
         persistError: false,
-        project: { ...p }
+        project: { ...p },
       });
       await get().refreshLibrary();
     } catch (e) {
       set({
         saveStatus: "unsaved",
-        persistError: true
+        persistError: true,
       });
       toast.error("ذخیره نشد — می‌توانی پرونده را خروجی بگیری");
       console.error(e);
       throw e;
     }
-  }
+  },
 }));
 
 export function currentMediaUrl(id?: string) {

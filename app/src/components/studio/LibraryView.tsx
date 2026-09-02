@@ -20,6 +20,7 @@ import {
   Sun,
   Trash2,
   Upload,
+  Wand2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -222,9 +223,9 @@ export function LibraryView() {
                 <Settings />
               </Button>
             </Tooltip>
-            <Button className="ms-1 hidden md:inline-flex" onClick={() => setOpen(true)}>
-              <Plus />
-              کمیک تازه
+            <Button className="ms-1 hidden md:inline-flex" onClick={() => go("/easy")}>
+              <Wand2 />
+              ساخت آسان
             </Button>
           </div>
         </div>
@@ -255,12 +256,16 @@ export function LibraryView() {
               .
             </p>
             <div className="mt-3.5 flex flex-wrap gap-2 md:mt-5">
-              <Button className="md:h-12 md:px-5" onClick={() => setOpen(true)}>
+              <Button className="md:h-12 md:px-5" onClick={() => go("/easy")}>
+                <Wand2 />
+                ساخت آسان
+              </Button>
+              <Button variant="outline" className="md:h-12 md:px-5" onClick={() => setOpen(true)}>
                 <Plus />
-                شروع یک کمیک
+                صفحهٔ خالی
               </Button>
               <Button
-                variant="outline"
+                variant="ghost"
                 className="hidden md:inline-flex md:h-12 md:px-5"
                 onClick={() => importRef.current?.click()}
               >
@@ -268,6 +273,10 @@ export function LibraryView() {
                 ورود پرونده
               </Button>
             </div>
+            <p className="mt-2 text-[11px] text-muted">
+              ساخت آسان: عکس‌ها را می‌دهی، تک‌تک ویرایششان می‌کنی، پنل و موسیقی را انتخاب می‌کنی —
+              کمیک ساخته می‌شود.
+            </p>
           </div>
         </section>
 
@@ -348,7 +357,11 @@ export function LibraryView() {
           </div>
         ) : rows.length === 0 ? (
           library.length === 0 ? (
-            <Empty onNew={() => setOpen(true)} onImport={() => importRef.current?.click()} />
+            <Empty
+              onNew={() => setOpen(true)}
+              onImport={() => importRef.current?.click()}
+              onEasy={() => go("/easy")}
+            />
           ) : (
             <NoResults q={q} onClear={() => setQ("")} />
           )
@@ -403,15 +416,15 @@ export function LibraryView() {
 
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => go("/easy")}
         aria-hidden={!scrolled}
         tabIndex={scrolled ? 0 : -1}
         className={`tap fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] start-4 z-30 flex h-14 items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-brand-fg shadow-[var(--shadow-brand),var(--shadow-lift)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden ${
           scrolled ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"
         }`}
       >
-        <Plus className="size-5" />
-        کمیک تازه
+        <Wand2 className="size-5" />
+        ساخت آسان
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -930,7 +943,15 @@ function Row({
   );
 }
 
-function Empty({ onNew, onImport }: { onNew: () => void; onImport: () => void }) {
+function Empty({
+  onNew,
+  onImport,
+  onEasy,
+}: {
+  onNew: () => void;
+  onImport: () => void;
+  onEasy: () => void;
+}) {
   return (
     <div className="material halftone relative overflow-hidden rounded-2xl px-6 py-14 text-center">
       <div className="relative mx-auto mb-5 w-32">
@@ -974,11 +995,15 @@ function Empty({ onNew, onImport }: { onNew: () => void; onImport: () => void })
         نمی‌شود.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
-        <Button size="lg" onClick={onNew}>
-          <Plus />
-          کمیک تازه
+        <Button size="lg" onClick={onEasy}>
+          <Wand2 />
+          ساخت آسان
         </Button>
-        <Button size="lg" variant="outline" onClick={onImport}>
+        <Button size="lg" variant="outline" onClick={onNew}>
+          <Plus />
+          صفحهٔ خالی
+        </Button>
+        <Button size="lg" variant="ghost" onClick={onImport}>
           <Upload />
           ورود پرونده
         </Button>

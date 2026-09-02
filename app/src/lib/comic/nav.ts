@@ -1,6 +1,6 @@
 import { createContext, createElement, useCallback, useContext, type ReactNode } from "react";
 
-export type AppPath = "/" | "/studio/$id" | "/read/$id";
+export type AppPath = "/" | "/easy" | "/studio/$id" | "/read/$id";
 export type GoFn = (to: AppPath, params?: { id: string }) => void;
 
 const NavCtx = createContext<GoFn | null>(null);
@@ -18,6 +18,7 @@ export function useAppNav(): GoFn {
         return;
       }
       if (to === "/") window.location.assign("/");
+      else if (to === "/easy") window.location.assign("/easy");
       else if (to === "/studio/$id") window.location.assign(`/studio/${params?.id ?? ""}`);
       else window.location.assign(`/read/${params?.id ?? ""}`);
     },
