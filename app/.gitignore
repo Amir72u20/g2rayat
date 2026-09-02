@@ -1,0 +1,10 @@
+node_modules/
+.vercel/
+.tanstack/
+.output/
+dist/
+dist-standalone/
+*.local
+.env
+.env.*
+.DS_Store

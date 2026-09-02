@@ -63,6 +63,23 @@ If you find this project useful, consider supporting its development:
 - [Buy me a coffee ☕](https://www.buymeacoffee.com/amiremohamadi)
 - Ethereum: `0x5724c38100b2aE3d2547974f46D0f2f49eb2D152`
 
+## کادر — Comic Studio (`app/`)
+
+The `app/` directory holds a separate project: **کادر**, a Persian comic studio
+(TanStack Start + React + Tailwind) that runs entirely on the reader's device.
+It is unrelated to the proxy setup above and has its own README, scripts and
+dependencies:
+
+```bash
+cd app
+npm install
+npm run dev     # http://localhost:8080
+```
+
+Design system, theming and the Android/Windows behaviour notes live in
+[`app/README.md`](./app/README.md).
+
+
 ## Disclaimer
 
 This tool is provided for educational and legitimate use only. Users are responsible for complying with their local laws and regulations regarding proxy usage. The author is not responsible for any misuse or consequences arising from the use of this tool.

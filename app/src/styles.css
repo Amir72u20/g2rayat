@@ -1,0 +1,545 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ==========================================================================
+   کادر — design tokens
+   Dark-first "ink & paper" system: deep press-ink chrome, warm paper canvas,
+   one vermilion accent for anything the reader can act on. Every surface is a
+   step on a single elevation ladder (bg → surface → elevated → overlay) so
+   panels never look like they were dropped in from another app.
+   ========================================================================== */
+
+@theme {
+  --font-sans: "Vazirmatn", "Segoe UI", Tahoma, system-ui, sans-serif;
+  --font-display: "Lalezar", "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Elevation ladder */
+  --color-bg: #0a0b10;
+  --color-bg-soft: #0e1016;
+  --color-surface: #13161e;
+  --color-elevated: #1a1e28;
+  --color-overlay: #212632;
+  --color-line: #272d3a;
+  --color-line-soft: #1d222d;
+
+  /* Ink */
+  --color-fg: #edf0f6;
+  --color-muted: #98a1b2;
+  --color-subtle: #69717f;
+
+  /* Accents */
+  --color-brand: #ef6446;
+  --color-brand-hi: #f8836a;
+  --color-brand-fg: #1b0803;
+  --color-steel: #6cc6db;
+  --color-steel-hi: #93dcec;
+  --color-ok: #58c396;
+  --color-warn: #e5b467;
+  --color-danger: #f0616f;
+
+  /* Canvas materials */
+  --color-paper: #f4efe3;
+  --color-ink: #15171c;
+
+  --color-primary: #e7ecf3;
+  --color-primary-fg: #0a0b10;
+  --color-select: #245a68;
+  --color-select-fg: #d3f2fa;
+
+  /* shadcn-compatible aliases */
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-fg);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-fg);
+  --color-popover: var(--color-elevated);
+  --color-popover-foreground: var(--color-fg);
+  --color-secondary: var(--color-elevated);
+  --color-secondary-foreground: var(--color-fg);
+  --color-muted-foreground: var(--color-muted);
+  --color-accent: var(--color-steel);
+  --color-accent-foreground: var(--color-bg);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-line);
+  --color-ring: var(--color-brand);
+
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius: 13px;
+
+  /* One hairline + two lifts. Layered so shadows read as light, not fog. */
+  --shadow-border: 0 0 0 1px rgba(255, 255, 255, 0.075);
+  --shadow-hair: 0 0 0 1px rgba(255, 255, 255, 0.075), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-raise:
+    0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4),
+    0 6px 16px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lift:
+    0 0 0 1px rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.35),
+    0 18px 40px -12px rgba(0, 0, 0, 0.65);
+  --shadow-brand: 0 8px 26px -10px color-mix(in oklab, var(--color-brand) 70%, transparent);
+
+  /* Motion — one ease for UI, one for anything that should feel physical. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
+  --dur-4: 420ms;
+
+  --animate-rise: rise var(--dur-4) var(--ease-out-quint) both;
+  --animate-pop: pop var(--dur-3) var(--ease-spring) both;
+  --animate-sheen: sheen 1.35s linear infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Daylight: warm newsprint instead of an inverted dark theme. */
+html[data-theme="light"] {
+  --color-bg: #efeade;
+  --color-bg-soft: #f4f0e6;
+  --color-surface: #faf7f0;
+  --color-elevated: #ffffff;
+  --color-overlay: #ffffff;
+  --color-line: #ddd6c7;
+  --color-line-soft: #e8e2d6;
+
+  --color-fg: #171922;
+  --color-muted: #5b6170;
+  --color-subtle: #878d9b;
+
+  --color-brand: #d94a2b;
+  --color-brand-hi: #c33f22;
+  --color-brand-fg: #fff6f2;
+  --color-steel: #1f7c93;
+  --color-steel-hi: #17677b;
+
+  --color-primary: #171922;
+  --color-primary-fg: #faf7f0;
+  --color-select: #bfe6ef;
+  --color-select-fg: #0d3d49;
+
+  --shadow-border: 0 0 0 1px rgba(23, 25, 34, 0.1);
+  --shadow-hair: 0 0 0 1px rgba(23, 25, 34, 0.09), 0 1px 2px rgba(23, 25, 34, 0.06);
+  --shadow-raise:
+    0 0 0 1px rgba(23, 25, 34, 0.09), 0 1px 2px rgba(23, 25, 34, 0.06),
+    0 8px 18px -10px rgba(23, 25, 34, 0.28);
+  --shadow-lift:
+    0 0 0 1px rgba(23, 25, 34, 0.1), 0 2px 6px rgba(23, 25, 34, 0.08),
+    0 20px 44px -16px rgba(23, 25, 34, 0.35);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
+    /* Android: no rubber-band / pull-to-refresh behind the app shell. */
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html[data-theme="light"] {
+    color-scheme: light;
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    overscroll-behavior-y: none;
+    /* Kills the 300ms double-tap zoom delay without blocking pinch. */
+    touch-action: manipulation;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-brand) 40%, transparent);
+    color: var(--color-fg);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  button,
+  [role="button"],
+  a,
+  label,
+  summary {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    border-radius: 0;
+  }
+
+  /* Phones zoom the viewport when a control's text is under 16px. */
+  @media (max-width: 767px) {
+    input,
+    textarea,
+    select {
+      font-size: 16px;
+    }
+  }
+
+  img,
+  canvas,
+  svg {
+    -webkit-user-drag: none;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Desktop (Windows especially) ships a chunky default scrollbar — this one
+     matches the chrome and stays out of the way. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--color-fg) 22%, transparent) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--color-fg) 16%, transparent);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--color-fg) 30%, transparent);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer base {
+  /* Native controls, re-skinned. Colour wells default to a grey chrome box
+     with a hard border; these read as swatches that belong to their panel. */
+  input[type="color"] {
+    -webkit-appearance: none;
+    appearance: none;
+    padding: 3px;
+    border: none;
+    background: var(--color-bg);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-border);
+    cursor: pointer;
+  }
+
+  input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 6px;
+  }
+
+  input[type="color"]::-moz-color-swatch {
+    border: none;
+    border-radius: 6px;
+  }
+
+  /* Disclosure rows get a real chevron instead of the platform triangle. */
+  details > summary {
+    list-style: none;
+  }
+
+  details > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  details > summary::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-inline-start: auto;
+    border-inline-end: 1.5px solid currentColor;
+    border-block-end: 1.5px solid currentColor;
+    opacity: 0.55;
+    transform: rotate(45deg);
+    transform-origin: center;
+    transition: transform var(--dur-2) var(--ease-out-quint);
+  }
+
+  details[open] > summary::after {
+    transform: rotate(-135deg);
+  }
+}
+
+@layer components {
+  /* ==========================================================================
+     Materials
+     ========================================================================== */
+
+  /* Card/panel material: fill + hairline + a 1px top highlight so edges catch
+     light the way a real stacked surface does. */
+  .material {
+    background: var(--color-surface);
+    box-shadow: var(--shadow-hair);
+    position: relative;
+  }
+
+  .material::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 42%);
+    pointer-events: none;
+  }
+
+  html[data-theme="light"] .material::before {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), transparent 46%);
+  }
+
+  /* Halftone dots — the comic-print texture used behind empty states/hero. */
+  .halftone {
+    background-image: radial-gradient(
+      color-mix(in oklab, var(--color-fg) 12%, transparent) 1px,
+      transparent 1.4px
+    );
+    background-size: 9px 9px;
+  }
+
+  .checker {
+    background-color: color-mix(in oklab, var(--color-bg) 88%, #000);
+    background-image:
+      linear-gradient(45deg, rgba(255, 255, 255, 0.028) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(255, 255, 255, 0.028) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.028) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.028) 75%);
+    background-size: 22px 22px;
+    background-position:
+      0 0,
+      0 11px,
+      11px -11px,
+      -11px 0;
+  }
+
+  html[data-theme="light"] .checker {
+    background-color: #e4dfd2;
+    background-image:
+      linear-gradient(45deg, rgba(0, 0, 0, 0.035) 25%, transparent 25%),
+      linear-gradient(-45deg, rgba(0, 0, 0, 0.035) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, rgba(0, 0, 0, 0.035) 75%),
+      linear-gradient(-45deg, transparent 75%, rgba(0, 0, 0, 0.035) 75%);
+  }
+
+  /* Top/bottom scrims for floating chrome over artwork. */
+  .scrim-top {
+    background: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-bg) 85%, transparent),
+      transparent
+    );
+  }
+
+  .scrim-bottom {
+    background: linear-gradient(
+      0deg,
+      color-mix(in oklab, var(--color-bg) 85%, transparent),
+      transparent
+    );
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-surface);
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--color-fg) 7%, transparent),
+      transparent
+    );
+    animation: var(--animate-sheen);
+  }
+
+  /* ==========================================================================
+     Behaviour helpers
+     ========================================================================== */
+
+  /* Everything tappable: no highlight flash, no double-tap zoom, a press state
+     that reads on a phone where there is no hover. */
+  .tap {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    user-select: none;
+    transition:
+      transform var(--dur-1) var(--ease-out-quint),
+      background-color var(--dur-2) var(--ease-out-quint),
+      color var(--dur-2) var(--ease-out-quint),
+      box-shadow var(--dur-2) var(--ease-out-quint);
+  }
+
+  .tap:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .safe-b {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-t {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Horizontal chip rails: snap, no bounce leaking to the page. */
+  .rail-x {
+    display: flex;
+    gap: 0.375rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .rail-x > * {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+  }
+
+  /* Edge fade: a clipped chip should look scrollable, not broken. */
+  .rail-fade {
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 14px,
+      #000 calc(100% - 14px),
+      transparent 100%
+    );
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .page-leaf {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--color-paper);
+    border-radius: 4px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.35),
+      0 12px 30px -18px rgba(0, 0, 0, 0.9);
+  }
+
+  .page-leaf canvas {
+    display: block;
+    width: 100% !important;
+    max-width: none;
+    height: 100% !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
