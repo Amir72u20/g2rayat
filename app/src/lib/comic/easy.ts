@@ -1,5 +1,14 @@
 import { uid } from "@/lib/utils";
-import { applyLayout, defaultStory, insertItem, newBubble, newImage, newPage } from "./factory";
+import {
+  applyLayout,
+  defaultStory,
+  insertItem,
+  newBubble,
+  newImage,
+  newPage,
+  newPanel,
+  newVideo,
+} from "./factory";
 import { layoutCellCount } from "./layouts";
 import { DOCUMENT_VERSION, NEUTRAL_ADJUST } from "./types";
 import type {
@@ -11,6 +20,7 @@ import type {
   ComicProject,
   ImageItem,
   PanelItem,
+  VideoItem,
   PanelKind,
   ReadingDirection,
 } from "./types";
@@ -37,21 +47,39 @@ export const FRAME_RATIOS: { id: string; label: string; r: number }[] = [
   { id: "9:16", label: "۹:۱۶", r: 9 / 16 },
 ];
 
+export type ShotKind = "image" | "video";
+
 export interface EasyShot {
   id: string;
   assetId: string;
   name: string;
+  /** A picture or a clip — both are edited the same way, on their own frame. */
+  kind: ShotKind;
   /** Aspect of the source file, used to offer a sensible starting frame. */
   sourceRatio: number;
   /** Frame ratio id from FRAME_RATIOS. */
   ratioId: string;
-  /** The editable frame: image + bubbles, in its own coordinate space. */
+  /** The editable frame: media + bubbles, in its own coordinate space. */
   frame: ComicPage;
 }
 
+export const AUTO_LAYOUT = "auto";
+
+export type GutterSize = "thin" | "normal" | "wide";
+
+export const GUTTERS: Record<GutterSize, number> = {
+  thin: 0.014,
+  normal: 0.022,
+  wide: 0.036,
+};
+
 export interface EasyPagePlan {
+  /** A PANEL_LAYOUTS key, or AUTO_LAYOUT for the mosaic that fills the page. */
   layoutKey: string;
   panelKind: PanelKind;
+  /** Pictures per page in auto mode (1–8). */
+  autoCount?: number;
+  gutter?: GutterSize;
 }
 
 export interface EasyMusic {
@@ -90,26 +118,58 @@ function frameSize(ratioId: string) {
   return { w: SHOT_W, h: Math.round(SHOT_W / r) };
 }
 
-export function newShot(assetId: string, name: string, sourceRatio: number): EasyShot {
+export function newShot(
+  assetId: string,
+  name: string,
+  sourceRatio: number,
+  kind: ShotKind = "image",
+  duration = 0,
+): EasyShot {
   const ratioId = closestRatioId(sourceRatio || 1);
   const { w, h } = frameSize(ratioId);
   const frame = newPage("", w, h);
   frame.background.color = "#ffffff";
-  const image = newImage(frame, assetId, {
+  const common = {
     x: 0,
     y: 0,
     w,
     h,
-    fitMode: "fill",
+    fitMode: "fill" as const,
     sourceRatio: sourceRatio || 1,
     adjust: { ...NEUTRAL_ADJUST },
-  });
-  insertItem(frame, image);
-  return { id: uid("shot"), assetId, name, sourceRatio: sourceRatio || 1, ratioId, frame };
+  };
+  const media =
+    kind === "video"
+      ? newVideo(frame, assetId, {
+          ...common,
+          name,
+          duration,
+          trimStart: 0,
+          trimEnd: duration,
+          volume: 1,
+          muted: false,
+          speed: 1,
+        })
+      : newImage(frame, assetId, common);
+  insertItem(frame, media);
+  return { id: uid("shot"), assetId, name, kind, sourceRatio: sourceRatio || 1, ratioId, frame };
 }
 
-export function shotImage(shot: EasyShot): ImageItem | null {
-  return (shot.frame.items.find((i) => i.type === "image") as ImageItem | undefined) ?? null;
+/** The one picture or clip on a frame. */
+export function shotMedia(shot: EasyShot): ImageItem | VideoItem | null {
+  return (
+    (shot.frame.items.find((i) => i.type === "image" || i.type === "video") as
+      ImageItem | VideoItem | undefined) ?? null
+  );
+}
+
+export function shotImage(shot: EasyShot): ImageItem | VideoItem | null {
+  return shotMedia(shot);
+}
+
+export function shotVideo(shot: EasyShot): VideoItem | null {
+  const media = shotMedia(shot);
+  return media && media.type === "video" ? media : null;
 }
 
 export function shotBubbles(shot: EasyShot): BubbleItem[] {
@@ -123,7 +183,7 @@ export function setShotRatio(shot: EasyShot, ratioId: string) {
   const sy = h / shot.frame.h;
   shot.ratioId = ratioId;
   shot.frame.items.forEach((it) => {
-    if (it.type === "image") {
+    if (it.type === "image" || it.type === "video") {
       it.x = 0;
       it.y = 0;
       it.w = w;
@@ -168,7 +228,95 @@ export function addShotBubble(shot: EasyShot, kind: BubbleKind): BubbleItem {
 }
 
 export function cellsPerPage(plan: EasyPagePlan) {
+  if (plan.layoutKey === AUTO_LAYOUT) return Math.min(8, Math.max(1, plan.autoCount ?? 4));
   return Math.max(1, layoutCellCount(plan.layoutKey));
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Automatic panels: a justified mosaic built from the pictures themselves.
+ *
+ * Pictures are kept in order and split into rows; every row fills the page
+ * width exactly, and the rows are scaled together to fill the height, so the
+ * page has no dead space — only the gutter between frames. The split is chosen
+ * by trying every way to cut the sequence into consecutive rows (at most eight
+ * pictures, so at most 128 options) and keeping the one whose natural height is
+ * closest to the page, which is also the one that needs the least crop.
+ */
+export function mosaicRects(
+  ratios: number[],
+  pageW: number,
+  pageH: number,
+  gutter = GUTTERS.normal,
+): Rect[] {
+  const n = ratios.length;
+  if (!n) return [];
+  const gap = pageW * gutter;
+  const margin = gap;
+  const availW = pageW - margin * 2;
+  const availH = pageH - margin * 2;
+
+  const rowsHeight = (groups: number[][]) => {
+    let total = 0;
+    for (const g of groups) {
+      const sum = g.reduce((acc, i) => acc + Math.max(0.2, ratios[i]), 0);
+      total += (availW - gap * (g.length - 1)) / sum;
+    }
+    return total + gap * (groups.length - 1);
+  };
+
+  // Every composition of n into consecutive runs.
+  let best: number[][] | null = null;
+  let bestCost = Infinity;
+  for (let mask = 0; mask < 1 << Math.max(0, n - 1); mask++) {
+    const groups: number[][] = [];
+    let current: number[] = [0];
+    for (let i = 1; i < n; i++) {
+      if (mask & (1 << (i - 1))) {
+        groups.push(current);
+        current = [i];
+      } else current.push(i);
+    }
+    groups.push(current);
+    if (groups.some((g) => g.length > 4)) continue;
+    const height = rowsHeight(groups);
+    // Distance from a full page, plus a nudge away from very lopsided rows.
+    const spread =
+      Math.max(...groups.map((g) => g.length)) - Math.min(...groups.map((g) => g.length));
+    const cost = Math.abs(height - availH) / availH + spread * 0.04;
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = groups;
+    }
+  }
+  const groups = best ?? [ratios.map((_, i) => i)];
+
+  const natural = rowsHeight(groups);
+  const scale = natural > 0 ? availH / natural : 1;
+  const rects: Rect[] = new Array(n);
+  let y = margin;
+  for (const g of groups) {
+    const sum = g.reduce((acc, i) => acc + Math.max(0.2, ratios[i]), 0);
+    const rowH = ((availW - gap * (g.length - 1)) / sum) * scale;
+    let x = margin;
+    g.forEach((i, k) => {
+      // Last frame in the row takes the rounding slack so the row ends flush.
+      const w =
+        k === g.length - 1
+          ? margin + availW - x
+          : (availW - gap * (g.length - 1)) * (Math.max(0.2, ratios[i]) / sum);
+      rects[i] = { x, y, w, h: rowH };
+      x += w + gap;
+    });
+    y += rowH + gap;
+  }
+  return rects;
 }
 
 /** Layouts that hold exactly N pictures, for a last page that is under-filled. */
@@ -312,6 +460,17 @@ export function buildEasyProject(opts: BuildOptions): ComicProject {
   pagePlans.forEach((plan, pageIndex) => {
     const page = newPage(`صفحه ${pageIndex + 1}`, opts.pageW, opts.pageH);
     const left = opts.shots.length - cursor;
+
+    if (plan.layoutKey === AUTO_LAYOUT) {
+      const take = Math.max(0, Math.min(cellsPerPage(plan), left));
+      const mine = opts.shots.slice(cursor, cursor + take);
+      cursor += take;
+      buildAutoPage(page, mine, plan, opts.direction);
+      if (opts.music && pageIndex === 0) page.playback.ambientAudio = musicToClip(opts.music);
+      pages.push(page);
+      return;
+    }
+
     const key =
       left > 0 && left < cellsPerPage(plan) ? layoutForCount(plan.layoutKey, left) : plan.layoutKey;
     applyLayout(page, key);
@@ -360,13 +519,50 @@ export function buildEasyProject(opts: BuildOptions): ComicProject {
   };
 }
 
+/**
+ * Automatic page: panels come from the pictures, not from a template grid. The
+ * mosaic already fills the paper, so there is nothing to fit or grow after it —
+ * only the reading order to mirror when the comic runs right to left.
+ */
+function buildAutoPage(
+  page: ComicPage,
+  shots: EasyShot[],
+  plan: EasyPagePlan,
+  direction: ReadingDirection,
+) {
+  if (!shots.length) return;
+  const rects = mosaicRects(
+    shots.map((s) => s.frame.w / s.frame.h),
+    page.w,
+    page.h,
+    GUTTERS[plan.gutter ?? "normal"],
+  );
+  shots.forEach((shot, i) => {
+    const r = rects[i];
+    if (!r) return;
+    // Mirror across the page so the first picture sits where reading starts.
+    const x = direction === "rtl" ? page.w - r.x - r.w : r.x;
+    const panel = newPanel(page, {
+      x,
+      y: r.y,
+      w: r.w,
+      h: r.h,
+      kind: plan.panelKind,
+      radius: plan.panelKind === "round" || plan.panelKind === "circle" ? 28 : 4,
+      story: defaultStory(i + 1),
+    });
+    insertItem(page, panel);
+    placeShotInPanel(page, panel, shot);
+  });
+}
+
 /** Copy one finished frame — picture and bubbles — into its panel. */
 function placeShotInPanel(page: ComicPage, panel: PanelItem, shot: EasyShot) {
   const frame = shot.frame;
   const scale = panel.w / frame.w;
-  const src = shotImage(shot);
+  const src = shotMedia(shot);
   if (src) {
-    const image = newImage(page, shot.assetId, {
+    const placed = {
       ...src,
       id: uid("i"),
       x: panel.x,
@@ -377,8 +573,8 @@ function placeShotInPanel(page: ComicPage, panel: PanelItem, shot: EasyShot) {
       free: false,
       radius: panel.radius || 0,
       story: defaultStory(panel.story.order),
-    });
-    insertItem(page, image);
+    } as ImageItem | VideoItem;
+    insertItem(page, placed);
   }
   shotBubbles(shot).forEach((b) => {
     const copy: BubbleItem = {

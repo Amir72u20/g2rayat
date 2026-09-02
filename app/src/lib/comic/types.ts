@@ -128,6 +128,7 @@ export interface ImageItem extends BaseItem {
 
 export interface VideoItem extends BaseItem {
   type: "video";
+  adjust?: ImageAdjust;
   assetId: string;
   posterAssetId?: string;
   zoom: number;

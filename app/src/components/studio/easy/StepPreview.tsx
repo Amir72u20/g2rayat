@@ -71,8 +71,8 @@ export function StepPreview() {
 
   return (
     <div className="space-y-4">
-      <div className="material relative overflow-hidden rounded-2xl bg-elevated p-2 [--frame-max:52dvh] lg:[--frame-max:66dvh]">
-        <div className="checker overflow-hidden rounded-xl">
+      <div className="material relative h-[54dvh] overflow-hidden rounded-2xl bg-elevated p-2 lg:h-[66dvh]">
+        <div className="checker size-full overflow-hidden rounded-xl">
           <FrameCanvas page={page} tick={tick} handles={false} />
         </div>
         <Button

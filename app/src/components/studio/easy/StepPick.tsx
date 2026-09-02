@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ImagePlus, Images, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Film, ImagePlus, Images, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,8 @@ export function StepPick() {
 
   useEffect(() => {
     void (async () => {
-      const rows = await listAssets("image");
+      const [images, videos] = await Promise.all([listAssets("image"), listAssets("video")]);
+      const rows = [...images, ...videos].sort((a, b) => b.createdAt - a.createdAt);
       await Promise.all(rows.slice(0, 40).map((a) => ensureAssetUrl(a.id)));
       setLibrary(rows);
     })();
@@ -38,9 +39,15 @@ export function StepPick() {
           toast.message(`این فایل پشتیبانی نمی‌شود: ${file.name}`);
           continue;
         }
-        addShot(rec.id, rec.name, (rec.width || 1) / Math.max(1, rec.height || 1));
+        addShot(
+          rec.id,
+          rec.name,
+          (rec.width || 1) / Math.max(1, rec.height || 1),
+          rec.kind === "video" ? "video" : "image",
+          rec.duration || 0,
+        );
       }
-      toast.success("عکس‌ها اضافه شدند");
+      toast.success("به فهرست اضافه شد");
     } catch {
       toast.error("خواندن فایل‌ها ناموفق بود");
     } finally {
@@ -70,10 +77,10 @@ export function StepPick() {
           <ImagePlus className="size-6" />
         </span>
         <span className="text-sm font-semibold">
-          {busy ? "در حال افزودن…" : "عکس‌هایت را انتخاب کن"}
+          {busy ? "در حال افزودن…" : "عکس یا ویدئو انتخاب کن"}
         </span>
         <span className="text-[11px] text-muted">
-          چند عکس با هم — ترتیبشان همان ترتیب قاب‌های کمیک است.
+          چند تا با هم — ترتیبشان همان ترتیب قاب‌های کمیک است.
         </span>
       </button>
 
@@ -110,8 +117,18 @@ export function StepPick() {
                   />
                 ) : (
                   <div className="grid aspect-square w-full place-items-center text-subtle">
-                    <Images className="size-6" />
+                    {shot.kind === "video" ? (
+                      <Film className="size-6" />
+                    ) : (
+                      <Images className="size-6" />
+                    )}
                   </div>
+                )}
+                {shot.kind === "video" && (
+                  <span className="absolute bottom-9 start-1 z-10 flex items-center gap-1 rounded-full bg-bg/85 px-1.5 py-0.5 text-[10px] text-brand">
+                    <Film className="size-2.5" />
+                    ویدئو
+                  </span>
                 )}
                 <figcaption className="flex items-center justify-between gap-1 p-1">
                   <button
@@ -141,7 +158,7 @@ export function StepPick() {
 
       {library.length > 0 && (
         <section>
-          <h2 className="mb-1 text-xs font-semibold">عکس‌های همین دستگاه</h2>
+          <h2 className="mb-1 text-xs font-semibold">فایل‌های همین دستگاه</h2>
           <p className="mb-2 text-[11px] text-muted">
             هر کدام را بزنی به انتهای فهرست اضافه می‌شود — می‌توانی یک عکس را چند بار هم بگذاری.
           </p>
@@ -151,14 +168,31 @@ export function StepPick() {
                 key={a.id}
                 type="button"
                 title={a.name}
-                onClick={() => addShot(a.id, a.name, (a.width || 1) / Math.max(1, a.height || 1))}
-                className="tap aspect-square overflow-hidden rounded-lg bg-elevated shadow-[var(--shadow-border)]"
+                onClick={() =>
+                  addShot(
+                    a.id,
+                    a.name,
+                    (a.width || 1) / Math.max(1, a.height || 1),
+                    a.kind === "video" ? "video" : "image",
+                    a.duration || 0,
+                  )
+                }
+                className="tap relative aspect-square overflow-hidden rounded-lg bg-elevated shadow-[var(--shadow-border)]"
               >
                 {thumbUrl(a.id) ? (
                   <img src={thumbUrl(a.id)} alt="" className="size-full object-cover" />
                 ) : (
                   <span className="grid size-full place-items-center text-[10px] text-muted">
-                    <Images className="size-4" />
+                    {a.kind === "video" ? (
+                      <Film className="size-4" />
+                    ) : (
+                      <Images className="size-4" />
+                    )}
+                  </span>
+                )}
+                {a.kind === "video" && (
+                  <span className="absolute bottom-1 start-1 grid size-4 place-items-center rounded-full bg-bg/80 text-brand">
+                    <Film className="size-2.5" />
                   </span>
                 )}
               </button>
@@ -169,7 +203,7 @@ export function StepPick() {
 
       {shots.length === 0 && library.length === 0 && (
         <p className="text-center text-sm text-muted">
-          هنوز عکسی نیست. از دکمهٔ بالا چند عکس بردار تا شروع کنیم.
+          هنوز چیزی نیست. از دکمهٔ بالا چند عکس یا ویدئو بردار تا شروع کنیم.
         </p>
       )}
 
@@ -187,7 +221,7 @@ export function StepPick() {
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         multiple
         className="hidden"
         onChange={(e) => {

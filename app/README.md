@@ -30,24 +30,37 @@ A four-step route (`/easy`) for making a comic without touching the studio, buil
 around the one thing that is genuinely hard on a phone: editing a picture after
 it is already clipped by a panel.
 
-1. **عکس‌ها** — pick images from the device or the local library; their order is
-   the comic's panel order.
+1. **عکس‌ها** — pick images *and video clips* from the device or the local
+   library; their order is the comic's panel order.
 2. **ویرایش تکی** — each picture is edited *outside* any panel, on a frame of its
    own: crop ratio, zoom and pan, colour grade (presets + brightness / contrast /
    saturation / warmth), and speech bubbles with nine skins from classic white to
-   glass and smoke. The film strip below switches pictures.
-3. **پنل و موسیقی** — layout and panel shape, either one setting for the whole
-   comic or per page, plus background music with volume, playback speed, bass and
-   treble (Web Audio shelf filters), fade in/out, and how far through the comic it
-   plays.
+   glass and smoke. A clip adds its own tab for the trim range, speed, volume and
+   mute. On a phone the step is a fixed three-zone editor — frame, film strip,
+   tools — so the picture never scrolls away and every control is one thumb-reach
+   from the bottom.
+3. **پنل و موسیقی** — collapsible cards for page setup, panels and music.
+   Panels come in two modes: **پنجرهٔ خودکار**, the default, builds the page from
+   the pictures themselves (1–8 per page, three gutter widths, live preview of
+   the real layout maths); or a ready-made layout, one for the whole comic or per
+   page. Music carries volume, playback speed, bass and treble (Web Audio shelf
+   filters), fade in/out, and how far through the comic it plays.
 4. **پیش‌نمایش** — the built comic, page by page, with a pencil on every page that
    opens just that page's settings. Nothing is baked: the wizard writes normal
    panels, images and bubbles, so everything stays editable in the studio.
 
-Two details that make the frames land well: each panel shrinks to its picture's
-aspect so nothing is cropped away, then the page's panels grow together to fill
-the paper; and a last page with fewer pictures than cells switches to a layout
-that holds exactly what is left, so a comic never ends on an empty frame.
+**Automatic panels** (`mosaicRects` in `src/lib/comic/easy.ts`) are a justified
+mosaic: the pictures are split into rows — every way of cutting the sequence is
+tried, at most 128 for eight pictures, and the split whose natural height is
+closest to the page wins — then every row fills the width and the rows are
+scaled together to fill the height. The page comes out full, with only the
+gutter between frames and a crop of a percent or two.
+
+For the ready-made layouts, two details make the frames land well: each panel
+shrinks to its picture's aspect so nothing is cropped away, then the page's
+panels grow together to fill the paper; and a last page with fewer pictures than
+cells switches to a layout that holds exactly what is left, so a comic never
+ends on an empty frame.
 
 Wizard state (including every frame) is kept in `sessionStorage`, so stepping
 back — or closing the tab by accident — does not lose the work.
@@ -103,6 +116,14 @@ never hard-code a colour, radius, shadow or easing.
 - Keyboard: `/` focuses library search, `n` starts a comic, and the editor
   shortcuts below.
 
+## Video in the reader
+
+A clip you have not seen before holds the page for two seconds after it is
+revealed: taps in that window show a countdown instead of turning the page, so a
+video is never skipped before it starts. Once a comic has been read to the end
+(`src/lib/comic/seen.ts`, per device), the hold is gone and every clip can be
+skipped immediately.
+
 ## Canvas behaviour
 
 Items move freely: they may bleed off the page, overlap, or grow past it, and the
@@ -146,4 +167,5 @@ Import remaps all IDs so an existing comic is never overwritten.
 | / (library) | Focus search |
 | n (library) | New comic |
 | Reader: arrows / space | Previous / next |
+| Reader: a fresh clip | Holds the page for its first 2s — until the comic has been read once |
 | Reader: tap or click | Next — except the side third behind you, which goes back (follows the reading direction). Dragging never navigates. |

@@ -1,21 +1,25 @@
 import { useEffect, useRef, useState } from "react";
-import { Music, Pause, Play, Trash2, Upload } from "lucide-react";
+import { ChevronDown, Music, Pause, Play, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { LayoutGrid, LayoutThumb } from "@/components/studio/ComicBits";
-import { PanelKindGrid } from "@/components/studio/ComicBits";
+import { LayoutGrid, LayoutThumb, PanelKindGrid } from "@/components/studio/ComicBits";
 import { intakeFile } from "@/lib/comic/asset-intake";
 import { applyTone } from "@/lib/comic/audio-graph";
 import { listAssets, mediaUrl } from "@/lib/comic/db";
 import { useEasy } from "@/lib/comic/easy-store";
+import { AUTO_LAYOUT, mosaicRects, GUTTERS, type GutterSize } from "@/lib/comic/easy";
 import { PANEL_LAYOUTS } from "@/lib/comic/layouts";
 import { PANEL_KINDS } from "@/lib/comic/panel-shape";
 import { PAGE_SIZES, type AssetMeta, type PanelKind } from "@/lib/comic/types";
 import { cn } from "@/lib/utils";
 
+/**
+ * Step three. On a phone this is a stack of collapsed cards — one tap opens the
+ * one you want instead of scrolling past every grid in the studio.
+ */
 export function StepLayout() {
   const perPage = useEasy((s) => s.perPage);
   const setPerPage = useEasy((s) => s.setPerPage);
@@ -27,17 +31,23 @@ export function StepLayout() {
   const planPagesOf = useEasy((s) => s.pagePlans);
   const pagePlans = planPagesOf();
   const shotsOfPage = useEasy((s) => s.shotsOfPage);
+  const shots = useEasy((s) => s.shots);
   const sizeId = useEasy((s) => s.sizeId);
   const setSize = useEasy((s) => s.setSize);
   const direction = useEasy((s) => s.direction);
   const setDirection = useEasy((s) => s.setDirection);
   const [openPage, setOpenPage] = useState<number | null>(null);
 
+  const auto = globalPlan.layoutKey === AUTO_LAYOUT;
+  const size = PAGE_SIZES.find((s) => s.id === sizeId) ?? PAGE_SIZES[0];
+
   return (
-    <div className="space-y-4">
-      <section className="material rounded-xl bg-surface p-3">
-        <h2 className="text-xs font-semibold">صفحهٔ کمیک</h2>
-        <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+    <div className="space-y-3">
+      <Card
+        title="صفحهٔ کمیک"
+        subtitle={`${size.label} · ${direction === "rtl" ? "راست به چپ" : "چپ به راست"}`}
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <span className="mb-1.5 block text-[11px] font-semibold text-muted">اندازهٔ صفحه</span>
             <Select value={sizeId} onChange={(e) => setSize(e.target.value)}>
@@ -62,94 +72,262 @@ export function StepLayout() {
             />
           </div>
         </div>
-      </section>
+      </Card>
 
-      <section className="material rounded-xl bg-surface p-3">
-        <h2 className="text-xs font-semibold">پنل‌ها</h2>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
-          چیدمان و شکل قاب‌ها. هر پنل خودش را کمی کوچک می‌کند تا عکس کامل و بدون بریدگی داخلش
-          بنشیند.
-        </p>
+      <Card
+        title="پنل‌ها"
+        subtitle={
+          auto ? `پنجرهٔ خودکار · تا ${globalPlan.autoCount ?? 4} تصویر در صفحه` : "چیدمان دستی"
+        }
+        defaultOpen
+      >
         <Segmented
-          ariaLabel="حالت چیدمان"
-          className="mt-3 w-full"
-          value={perPage ? "page" : "all"}
-          onChange={(v) => setPerPage(v === "page")}
+          ariaLabel="حالت پنل"
+          className="w-full"
+          value={auto ? "auto" : "manual"}
+          onChange={(v) =>
+            setGlobalPlan(
+              v === "auto"
+                ? { layoutKey: AUTO_LAYOUT, autoCount: globalPlan.autoCount ?? 4 }
+                : { layoutKey: "4" },
+            )
+          }
           options={[
-            { value: "all", label: "یکسان برای کل کمیک" },
-            { value: "page", label: "برای هر صفحه جدا" },
+            {
+              value: "auto",
+              label: (
+                <span className="flex items-center gap-1.5">
+                  <Sparkles />
+                  پنجرهٔ خودکار
+                </span>
+              ),
+            },
+            { value: "manual", label: "چیدمان آماده" },
           ]}
         />
 
-        {!perPage ? (
-          <div className="mt-3 space-y-3">
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold text-muted">
-                چیدمان قاب‌ها
-              </span>
-              <LayoutGrid
-                value={globalPlan.layoutKey}
-                onPick={(layoutKey) => setGlobalPlan({ layoutKey })}
-              />
-            </div>
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold text-muted">شکل قاب‌ها</span>
-              <PanelKindGrid
-                value={globalPlan.panelKind}
-                onPick={(panelKind: PanelKind) => setGlobalPlan({ panelKind })}
-              />
-            </div>
-          </div>
+        {auto ? (
+          <AutoPanelControls />
         ) : (
-          <div className="mt-3 space-y-2">
-            {pagePlans.map((plan, i) => {
-              const layout = PANEL_LAYOUTS.find((L) => L.k === plan.layoutKey);
-              const kind = PANEL_KINDS.find((k) => k.k === plan.panelKind);
-              const count = shotsOfPage(i).length;
-              const open = openPage === i;
-              return (
-                <div key={i} className="rounded-xl bg-elevated shadow-[var(--shadow-border)]">
-                  <button
-                    type="button"
-                    onClick={() => setOpenPage(open ? null : i)}
-                    className="tap flex w-full items-center gap-3 p-2.5 text-start"
-                  >
-                    <span className="grid h-12 w-10 shrink-0 place-items-center rounded-md bg-bg p-1">
-                      {layout ? <LayoutThumb layout={layout} /> : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">صفحهٔ {i + 1}</span>
-                      <span className="num block text-[11px] text-muted">
-                        {layout?.n} · {kind?.n} · {count} عکس
-                      </span>
-                    </span>
-                    <span className="text-[11px] text-brand">{open ? "بستن" : "تغییر"}</span>
-                  </button>
-                  {open && (
-                    <div className="space-y-3 border-t border-line-soft p-2.5">
-                      <LayoutGrid
-                        value={plan.layoutKey}
-                        onPick={(layoutKey) => setPagePlan(i, { layoutKey })}
-                      />
-                      <PanelKindGrid
-                        value={plan.panelKind}
-                        onPick={(panelKind: PanelKind) => setPagePlan(i, { panelKind })}
-                      />
-                    </div>
-                  )}
+          <>
+            <Segmented
+              ariaLabel="حالت چیدمان"
+              className="w-full"
+              value={perPage ? "page" : "all"}
+              onChange={(v) => setPerPage(v === "page")}
+              options={[
+                { value: "all", label: "یکسان برای کل کمیک" },
+                { value: "page", label: "برای هر صفحه جدا" },
+              ]}
+            />
+            {!perPage ? (
+              <div className="space-y-3">
+                <div>
+                  <span className="mb-1.5 block text-[11px] font-semibold text-muted">
+                    چیدمان قاب‌ها
+                  </span>
+                  <LayoutGrid
+                    value={globalPlan.layoutKey}
+                    onPick={(layoutKey) => setGlobalPlan({ layoutKey })}
+                  />
                 </div>
-              );
-            })}
-          </div>
+                <div>
+                  <span className="mb-1.5 block text-[11px] font-semibold text-muted">
+                    شکل قاب‌ها
+                  </span>
+                  <PanelKindGrid
+                    value={globalPlan.panelKind}
+                    onPick={(panelKind: PanelKind) => setGlobalPlan({ panelKind })}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pagePlans.map((plan, i) => {
+                  const layout = PANEL_LAYOUTS.find((L) => L.k === plan.layoutKey);
+                  const kind = PANEL_KINDS.find((k) => k.k === plan.panelKind);
+                  const count = shotsOfPage(i).length;
+                  const open = openPage === i;
+                  return (
+                    <div key={i} className="rounded-xl bg-elevated shadow-[var(--shadow-border)]">
+                      <button
+                        type="button"
+                        onClick={() => setOpenPage(open ? null : i)}
+                        className="tap flex w-full items-center gap-3 p-2.5 text-start"
+                      >
+                        <span className="grid h-12 w-10 shrink-0 place-items-center rounded-md bg-bg p-1">
+                          {layout ? <LayoutThumb layout={layout} /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium">صفحهٔ {i + 1}</span>
+                          <span className="num block text-[11px] text-muted">
+                            {layout?.n} · {kind?.n} · {count} تصویر
+                          </span>
+                        </span>
+                        <span className="text-[11px] text-brand">{open ? "بستن" : "تغییر"}</span>
+                      </button>
+                      {open && (
+                        <div className="space-y-3 border-t border-line-soft p-2.5">
+                          <LayoutGrid
+                            value={plan.layoutKey}
+                            onPick={(layoutKey) => setPagePlan(i, { layoutKey })}
+                          />
+                          <PanelKindGrid
+                            value={plan.panelKind}
+                            onPick={(panelKind: PanelKind) => setPagePlan(i, { panelKind })}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
-      </section>
+      </Card>
 
-      <MusicSection pageCount={pagePlans.length} />
+      <MusicCard pageCount={pagePlans.length} shotCount={shots.length} />
     </div>
   );
 }
 
-function MusicSection({ pageCount }: { pageCount: number }) {
+/** A collapsible card — the phone-friendly shape for a settings step. */
+function Card({
+  title,
+  subtitle,
+  defaultOpen,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <section className="material overflow-hidden rounded-xl bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="tap flex w-full items-center gap-2 p-3 text-start"
+        aria-expanded={open}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold">{title}</span>
+          {subtitle ? (
+            <span className="block truncate text-[11px] text-muted">{subtitle}</span>
+          ) : null}
+        </span>
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && <div className="space-y-3 border-t border-line-soft p-3">{children}</div>}
+    </section>
+  );
+}
+
+/**
+ * Automatic panels: pick how many pictures share a page and how wide the gutter
+ * is, and the page is drawn from the pictures themselves — no empty space to
+ * tidy up afterwards. The preview here is the real layout maths, not a sketch.
+ */
+function AutoPanelControls() {
+  const globalPlan = useEasy((s) => s.globalPlan);
+  const setGlobalPlan = useEasy((s) => s.setGlobalPlan);
+  const shots = useEasy((s) => s.shots);
+  const count = Math.min(8, Math.max(1, globalPlan.autoCount ?? 4));
+  const gutter: GutterSize = globalPlan.gutter ?? "normal";
+
+  const sample = shots.slice(0, count).map((s) => s.frame.w / s.frame.h);
+  const ratios = sample.length ? sample : Array.from({ length: count }, () => 1);
+  const W = 120;
+  const H = 190;
+  const rects = mosaicRects(ratios, W, H, GUTTERS[gutter]);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-[11px]">
+          <span className="font-semibold text-muted">چند تصویر در هر صفحه</span>
+          <span className="num text-fg">{count}</span>
+        </div>
+        <div className="grid grid-cols-8 gap-1">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setGlobalPlan({ autoCount: i + 1 })}
+              className={cn(
+                "tap num h-10 rounded-lg text-sm font-semibold",
+                count === i + 1
+                  ? "bg-brand text-brand-fg"
+                  : "bg-elevated text-muted shadow-[var(--shadow-border)] hover:text-fg",
+              )}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <span className="mb-1.5 block text-[11px] font-semibold text-muted">فاصلهٔ بین قاب‌ها</span>
+        <Segmented
+          ariaLabel="فاصله"
+          value={gutter}
+          onChange={(g) => setGlobalPlan({ gutter: g })}
+          className="w-full"
+          options={[
+            { value: "thin", label: "نازک" },
+            { value: "normal", label: "معمولی" },
+            { value: "wide", label: "پهن" },
+          ]}
+        />
+      </div>
+
+      <div className="flex items-center gap-3 rounded-xl bg-elevated p-3 shadow-[var(--shadow-border)]">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          className="h-24 w-auto shrink-0"
+          role="img"
+          aria-label="پیش‌نمایش چیدمان"
+        >
+          <rect width={W} height={H} rx="4" fill="var(--color-paper)" />
+          {rects.map((r, i) => (
+            <rect
+              key={i}
+              x={r.x}
+              y={r.y}
+              width={r.w}
+              height={r.h}
+              rx="2"
+              fill="var(--color-brand)"
+              fillOpacity="0.22"
+              stroke="var(--color-brand)"
+              strokeWidth="1.5"
+            />
+          ))}
+        </svg>
+        <p className="text-[11px] leading-relaxed text-muted">
+          پنل‌ها از روی خودِ تصویرها ساخته می‌شوند و کل صفحه را پر می‌کنند؛ فقط یک فاصلهٔ باریک
+          بینشان می‌ماند. اگر تصویرها کم بیایند، صفحهٔ آخر خودش را جمع می‌کند.
+        </p>
+      </div>
+
+      <div>
+        <span className="mb-1.5 block text-[11px] font-semibold text-muted">شکل قاب‌ها</span>
+        <PanelKindGrid
+          value={globalPlan.panelKind}
+          onPick={(panelKind: PanelKind) => setGlobalPlan({ panelKind })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MusicCard({ pageCount, shotCount }: { pageCount: number; shotCount: number }) {
   const music = useEasy((s) => s.music);
   const setMusic = useEasy((s) => s.setMusic);
   const patchMusic = useEasy((s) => s.patchMusic);
@@ -214,15 +392,12 @@ function MusicSection({ pageCount }: { pageCount: number }) {
   }
 
   return (
-    <section className="material rounded-xl bg-surface p-3">
-      <h2 className="text-xs font-semibold">موسیقی پس‌زمینه</h2>
-      <p className="mt-0.5 text-[11px] leading-relaxed text-muted">
-        یک قطعه بگذار و همین‌جا صدایش را بساز: سرعت، بم و زیر، محو ورود و خروج، و اینکه تا کدام صفحه
-        پخش شود.
-      </p>
-
+    <Card
+      title="موسیقی پس‌زمینه"
+      subtitle={music ? music.name : `اختیاری · ${shotCount} تصویر در ${pageCount} صفحه`}
+    >
       {!music ? (
-        <div className="mt-3 space-y-3">
+        <div className="space-y-3">
           <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
             <Upload />
             انتخاب فایل صدا
@@ -250,7 +425,7 @@ function MusicSection({ pageCount }: { pageCount: number }) {
           )}
         </div>
       ) : (
-        <div className="mt-3 space-y-3">
+        <div className="space-y-3">
           <div className="flex items-center gap-2 rounded-lg bg-elevated p-2 shadow-[var(--shadow-border)]">
             <Button variant="secondary" size="icon-sm" onClick={togglePlay} aria-label="پخش نمونه">
               {playing ? <Pause /> : <Play />}
@@ -375,7 +550,7 @@ function MusicSection({ pageCount }: { pageCount: number }) {
           toast.success("موسیقی اضافه شد");
         }}
       />
-    </section>
+    </Card>
   );
 }
 

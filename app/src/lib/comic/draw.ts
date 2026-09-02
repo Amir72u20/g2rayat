@@ -259,6 +259,14 @@ function drawVideo(ctx: CanvasRenderingContext2D, it: VideoItem, media: MediaBag
   const video = media.videos[it.assetId];
   const poster = it.posterAssetId ? media.images[it.posterAssetId] : null;
   if (video && video.readyState >= 2 && video.videoWidth) {
+    const filter = adjustFilter(it.adjust);
+    if (filter) {
+      ctx.save();
+      ctx.filter = filter;
+      mediaFrame(ctx, it, video, video.videoWidth, video.videoHeight, page);
+      ctx.restore();
+      return;
+    }
     mediaFrame(ctx, it, video, video.videoWidth, video.videoHeight, page);
     return;
   }

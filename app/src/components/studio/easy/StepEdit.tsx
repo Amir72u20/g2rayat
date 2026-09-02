@@ -1,13 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Crop,
+  Film,
   FlipHorizontal,
   FlipVertical,
   MessageCircle,
   Palette,
+  Pause,
+  Play,
   RotateCcw,
   Trash2,
-  Type,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
@@ -23,14 +27,15 @@ import {
   resizeCorner,
   type HandleCorner,
 } from "@/lib/comic/geometry";
-import { FRAME_RATIOS, shotImage, type EasyShot } from "@/lib/comic/easy";
+import { FRAME_RATIOS, shotMedia, shotVideo, type EasyShot } from "@/lib/comic/easy";
 import { useEasy } from "@/lib/comic/easy-store";
 import { thumbUrl } from "@/lib/comic/db";
-import type { BubbleItem, BubbleKind, ComicItem } from "@/lib/comic/types";
+import { getMediaBag, pauseVideo, playVideo, seekVideo } from "@/lib/comic/media-cache";
+import type { BubbleItem, BubbleKind, ComicItem, VideoItem } from "@/lib/comic/types";
 import { cn } from "@/lib/utils";
 import { FrameCanvas, type ScenePoint } from "./FrameCanvas";
 
-type Tool = "crop" | "color" | "bubble";
+type Tool = "crop" | "color" | "bubble" | "clip";
 
 const BUBBLE_KINDS: { k: BubbleKind; n: string }[] = [
   { k: "round", n: "گفتگو" },
@@ -74,6 +79,13 @@ interface Drag {
   last: { x: number; y: number };
 }
 
+/**
+ * The picture editor.
+ *
+ * On a phone this is a fixed three-zone editor — picture, film strip, tools —
+ * rather than a long scrolling form: the frame stays in view while you work,
+ * and every control sits inside one thumb-height panel at the bottom.
+ */
 export function StepEdit() {
   const shots = useEasy((s) => s.shots);
   const tick = useEasy((s) => s.tick);
@@ -86,11 +98,17 @@ export function StepEdit() {
   const drag = useRef<Drag | null>(null);
 
   const shot = shots.find((s) => s.id === activeShotId) ?? shots[0] ?? null;
+  const video = shot ? shotVideo(shot) : null;
+
+  // A clip's own tab replaces the crop tab's job for timing and sound.
+  useEffect(() => {
+    if (!video && tool === "clip") setTool("crop");
+  }, [video, tool]);
 
   if (!shot) {
     return (
       <p className="rounded-xl bg-surface p-6 text-center text-sm text-muted shadow-[var(--shadow-border)]">
-        اول در مرحلهٔ قبل چند عکس انتخاب کن.
+        اول در مرحلهٔ قبل چند عکس یا ویدئو انتخاب کن.
       </p>
     );
   }
@@ -129,13 +147,13 @@ export function StepEdit() {
 
   function onMove(pt: ScenePoint, e: React.PointerEvent) {
     const d = drag.current;
-    if (!d) return;
+    if (!d || !shot) return;
     const dx = pt.x - d.last.x;
     const dy = pt.y - d.last.y;
     d.last = pt;
     if (d.mode === "crop") {
-      const img = shotImage(shot!);
-      if (img) panCrop(img, dx, dy);
+      const media = shotMedia(shot);
+      if (media) panCrop(media, dx, dy);
       touchFrame();
       return;
     }
@@ -155,14 +173,67 @@ export function StepEdit() {
     drag.current = null;
   }
 
-  const img = shotImage(shot);
-  const adjust = img?.adjust ?? { brightness: 1, contrast: 1, saturate: 1, warmth: 0 };
+  const media = shotMedia(shot);
+  const adjust = media?.adjust ?? { brightness: 1, contrast: 1, saturate: 1, warmth: 0 };
+
+  const tools: { value: Tool; label: React.ReactNode }[] = [
+    {
+      value: "crop",
+      label: (
+        <span className="flex items-center gap-1.5">
+          <Crop />
+          قاب
+        </span>
+      ),
+    },
+    ...(video
+      ? [
+          {
+            value: "clip" as Tool,
+            label: (
+              <span className="flex items-center gap-1.5">
+                <Film />
+                ویدئو
+              </span>
+            ),
+          },
+        ]
+      : []),
+    {
+      value: "color",
+      label: (
+        <span className="flex items-center gap-1.5">
+          <Palette />
+          رنگ
+        </span>
+      ),
+    },
+    {
+      value: "bubble",
+      label: (
+        <span className="flex items-center gap-1.5">
+          <MessageCircle />
+          حباب
+        </span>
+      ),
+    },
+  ];
+
+  const panel = (
+    <>
+      {tool === "crop" && <CropPanel shot={shot} />}
+      {tool === "clip" && video && <ClipPanel item={video} />}
+      {tool === "color" && <ColorPanel adjust={adjust} />}
+      {tool === "bubble" && <BubblePanel selected={selected} />}
+    </>
+  );
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-      <div className="space-y-3">
-        <div className="material overflow-hidden rounded-2xl bg-elevated p-2 [--frame-max:40dvh] sm:[--frame-max:48dvh] lg:[--frame-max:62dvh]">
-          <div className="checker overflow-hidden rounded-xl">
+    <div className="flex h-full min-h-0 flex-col gap-2 lg:grid lg:h-auto lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
+      {/* Zone one: the frame itself, which never scrolls away. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-none">
+        <div className="material min-h-0 flex-1 overflow-hidden rounded-2xl bg-elevated p-2 lg:h-[60dvh] lg:flex-none">
+          <div className="checker size-full overflow-hidden rounded-xl">
             <FrameCanvas
               page={frame}
               tick={tick}
@@ -173,55 +244,29 @@ export function StepEdit() {
             />
           </div>
         </div>
-        <p className="text-center text-[11px] text-muted">
+        <p className="hidden text-center text-[11px] text-muted sm:block">
           {selected
             ? "حباب را بکش تا جابه‌جا شود · گوشه‌ها اندازه · نقطهٔ نوک، دنبالهٔ حباب"
-            : "روی عکس بکش تا داخل قاب جابه‌جا شود · با «برش» بزرگ‌نمایی را عوض کن"}
+            : "روی تصویر بکش تا داخل قاب جابه‌جا شود"}
         </p>
 
+        {/* Zone two: the film strip. */}
         <ShotStrip shots={shots} activeId={shot.id} onPick={setActiveShot} />
       </div>
 
-      <div className="space-y-3">
+      {/* Zone three: tools — a fixed, scrollable panel on a phone; a column on
+          a desktop. Either way the frame above stays visible. */}
+      <div className="flex shrink-0 flex-col gap-2 lg:gap-3">
         <Segmented
           ariaLabel="ابزار"
           value={tool}
           onChange={setTool}
           className="w-full"
-          options={[
-            {
-              value: "crop",
-              label: (
-                <span className="flex items-center gap-1.5">
-                  <Crop />
-                  برش
-                </span>
-              ),
-            },
-            {
-              value: "color",
-              label: (
-                <span className="flex items-center gap-1.5">
-                  <Palette />
-                  رنگ
-                </span>
-              ),
-            },
-            {
-              value: "bubble",
-              label: (
-                <span className="flex items-center gap-1.5">
-                  <MessageCircle />
-                  حباب
-                </span>
-              ),
-            },
-          ]}
+          options={tools}
         />
-
-        {tool === "crop" && <CropPanel shot={shot} />}
-        {tool === "color" && <ColorPanel adjust={adjust} />}
-        {tool === "bubble" && <BubblePanel selected={selected} />}
+        <div className="max-h-[34dvh] space-y-3 overflow-y-auto overscroll-contain pb-1 lg:max-h-none lg:overflow-visible">
+          {panel}
+        </div>
       </div>
     </div>
   );
@@ -272,14 +317,14 @@ function Row({
 function CropPanel({ shot }: { shot: EasyShot }) {
   const setRatio = useEasy((s) => s.setRatio);
   const patchImage = useEasy((s) => s.patchImage);
-  const img = shotImage(shot);
-  const zoom = img?.zoom ?? 1;
+  const media = shotMedia(shot);
+  const zoom = media?.zoom ?? 1;
 
   return (
     <>
       <Section
-        title="قاب عکس"
-        hint="نسبت قاب را انتخاب کن؛ پنل کمیک بعداً خودش با همین نسبت ساخته می‌شود."
+        title="قاب تصویر"
+        hint="نسبت قاب را انتخاب کن؛ پنل کمیک بعداً با همین نسبت ساخته می‌شود."
       >
         <div className="grid grid-cols-3 gap-1.5">
           {FRAME_RATIOS.map((f) => (
@@ -310,10 +355,10 @@ function CropPanel({ shot }: { shot: EasyShot }) {
           />
         </Row>
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" size="sm" onClick={() => patchImage({ flipX: !img?.flipX })}>
+          <Button variant="outline" size="sm" onClick={() => patchImage({ flipX: !media?.flipX })}>
             <FlipHorizontal /> افقی
           </Button>
-          <Button variant="outline" size="sm" onClick={() => patchImage({ flipY: !img?.flipY })}>
+          <Button variant="outline" size="sm" onClick={() => patchImage({ flipY: !media?.flipY })}>
             <FlipVertical /> عمودی
           </Button>
           <Button variant="outline" size="sm" onClick={() => patchImage({ fitMode: "fill" })}>
@@ -332,6 +377,92 @@ function CropPanel({ shot }: { shot: EasyShot }) {
           }
         >
           <RotateCcw /> برگرداندن به حالت اول
+        </Button>
+      </Section>
+    </>
+  );
+}
+
+/** Timing and sound for a clip — the parts a still picture has no use for. */
+function ClipPanel({ item }: { item: VideoItem }) {
+  const patchVideo = useEasy((s) => s.patchVideo);
+  const [playing, setPlaying] = useState(false);
+  const bag = getMediaBag();
+  const el = bag.videos[item.assetId];
+  const duration = item.duration || el?.duration || 0;
+  const end = item.trimEnd > 0 ? item.trimEnd : duration || 1;
+
+  useEffect(
+    () => () => {
+      pauseVideo(item.assetId);
+    },
+    [item.assetId],
+  );
+
+  function toggle() {
+    if (playing) {
+      pauseVideo(item.assetId);
+      setPlaying(false);
+      return;
+    }
+    seekVideo(item.assetId, item.trimStart);
+    playVideo(item.assetId, item.muted, item.speed, item.volume);
+    setPlaying(true);
+  }
+
+  return (
+    <>
+      <Section title="برش ویدئو" hint="فقط همین بازه در کمیک پخش می‌شود.">
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="icon" onClick={toggle} aria-label="پخش نمونه">
+            {playing ? <Pause /> : <Play />}
+          </Button>
+          <div className="min-w-0 flex-1">
+            <Slider
+              min={0}
+              max={Math.max(0.2, duration || 1)}
+              step={0.05}
+              value={[item.trimStart, end]}
+              onValueChange={([a, b]) => {
+                const start = Math.min(a, b);
+                const stop = Math.max(a, b);
+                patchVideo({ trimStart: start, trimEnd: stop });
+                seekVideo(item.assetId, start);
+              }}
+            />
+          </div>
+        </div>
+        <div dir="ltr" className="num flex justify-between text-[11px] text-muted">
+          <span>{item.trimStart.toFixed(1)}s</span>
+          <span>{end.toFixed(1)}s</span>
+        </div>
+      </Section>
+
+      <Section title="صدا و سرعت">
+        <Row label="سرعت پخش" value={`${item.speed.toFixed(2)}×`}>
+          <Slider
+            min={25}
+            max={300}
+            value={[Math.round(item.speed * 100)]}
+            onValueChange={([v]) => patchVideo({ speed: v / 100 })}
+          />
+        </Row>
+        <Row label="بلندی صدا" value={`${Math.round(item.volume * 100)}٪`}>
+          <Slider
+            min={0}
+            max={100}
+            value={[Math.round(item.volume * 100)]}
+            onValueChange={([v]) => patchVideo({ volume: v / 100 })}
+          />
+        </Row>
+        <Button
+          variant={item.muted ? "default" : "outline"}
+          size="sm"
+          className="w-full"
+          onClick={() => patchVideo({ muted: !item.muted })}
+        >
+          {item.muted ? <VolumeX /> : <Volume2 />}
+          {item.muted ? "بی‌صدا است" : "بی‌صدا کن"}
         </Button>
       </Section>
     </>
@@ -417,7 +548,7 @@ function BubblePanel({ selected }: { selected: BubbleItem | null }) {
 
   return (
     <>
-      <Section title="حباب تازه" hint="یکی را بزن تا روی عکس بیفتد، بعد جابه‌جا و بزرگش کن.">
+      <Section title="حباب تازه" hint="یکی را بزن تا روی تصویر بیفتد، بعد جابه‌جا و بزرگش کن.">
         <div className="grid grid-cols-3 gap-1.5">
           {BUBBLE_KINDS.map((b) => (
             <button
@@ -434,7 +565,7 @@ function BubblePanel({ selected }: { selected: BubbleItem | null }) {
 
       {!selected ? (
         <p className="rounded-xl bg-surface p-3 text-[11px] leading-relaxed text-muted shadow-[var(--shadow-border)]">
-          یک حباب روی عکس بزن تا تنظیماتش اینجا باز شود.
+          یک حباب روی تصویر بزن تا تنظیماتش اینجا باز شود.
         </p>
       ) : (
         <>
@@ -590,7 +721,7 @@ function ShotStrip({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="rail-x rail-fade no-scrollbar items-stretch py-1">
+    <div className="rail-x rail-fade no-scrollbar shrink-0 items-stretch py-1">
       {shots.map((s, i) => {
         const active = s.id === activeId;
         const bubbles = s.frame.items.filter((it: ComicItem) => it.type === "bubble").length;
@@ -600,20 +731,25 @@ function ShotStrip({
             type="button"
             onClick={() => onPick(s.id)}
             className={cn(
-              "tap relative w-20 shrink-0 overflow-hidden rounded-lg bg-elevated",
+              "tap relative w-16 shrink-0 overflow-hidden rounded-lg bg-elevated sm:w-20",
               active ? "shadow-[0_0_0_1.5px_var(--color-brand)]" : "shadow-[var(--shadow-border)]",
             )}
           >
             {thumbUrl(s.assetId) ? (
               <img src={thumbUrl(s.assetId)} alt="" className="aspect-square w-full object-cover" />
             ) : (
-              <span className="grid aspect-square w-full place-items-center text-[10px] text-muted">
-                <Type className="size-4" />
+              <span className="grid aspect-square w-full place-items-center text-muted">
+                <Film className="size-4" />
               </span>
             )}
             <span className="num absolute top-1 start-1 rounded-full bg-bg/80 px-1.5 text-[10px] font-semibold">
               {i + 1}
             </span>
+            {s.kind === "video" && (
+              <span className="absolute bottom-1 start-1 grid size-4 place-items-center rounded-full bg-bg/80 text-brand">
+                <Film className="size-2.5" />
+              </span>
+            )}
             {bubbles > 0 && (
               <span className="absolute bottom-1 end-1 flex items-center gap-0.5 rounded-full bg-bg/80 px-1.5 text-[10px]">
                 <MessageCircle className="size-2.5" />

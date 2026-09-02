@@ -12,8 +12,8 @@ import { StepLayout } from "./StepLayout";
 import { StepPreview } from "./StepPreview";
 
 const HINTS: Record<EasyStep, string> = {
-  pick: "عکس‌هایی که می‌خواهی در کمیک بیایند را انتخاب کن — ترتیبشان همان ترتیب قاب‌هاست.",
-  edit: "هر عکس را جدا و بیرون از قاب بساز: برش، رنگ و نور، و حباب گفتگو.",
+  pick: "عکس‌ها و ویدئوهایی که می‌خواهی در کمیک بیایند را انتخاب کن — ترتیبشان همان ترتیب قاب‌هاست.",
+  edit: "هر تصویر را جدا و بیرون از قاب بساز: برش، رنگ و نور، حباب گفتگو، و برای ویدئو، بازه و صدا.",
   layout: "چیدمان و شکل قاب‌ها را انتخاب کن و اگر خواستی موسیقی پس‌زمینه بگذار.",
   preview: "کمیک را ببین؛ هر صفحه‌ای ایراد داشت، همان‌جا با مداد درستش کن.",
 };
@@ -51,9 +51,11 @@ export function EasyWizard() {
     else go("/");
   }
 
+  // One viewport-tall column: header, a body that owns its own scrolling, and a
+  // footer that is always within thumb reach on a phone.
   return (
-    <div className="min-h-dvh bg-bg pb-28 text-fg">
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur-xl">
+    <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
+      <header className="z-20 shrink-0 border-b border-line bg-bg/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 md:px-8">
           <Button variant="ghost" size="icon-sm" aria-label="بستن" onClick={leave}>
             <X />
@@ -106,8 +108,23 @@ export function EasyWizard() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-4 md:px-8">
-        <p className="mb-4 text-[12px] leading-relaxed text-muted">{HINTS[step]}</p>
+      <main
+        className={cn(
+          "mx-auto w-full max-w-5xl flex-1 px-4 py-3 md:px-8 md:py-4",
+          // The picture editor manages its own zones; every other step scrolls.
+          step === "edit"
+            ? "flex min-h-0 flex-col overflow-hidden lg:overflow-y-auto"
+            : "min-h-0 overflow-y-auto",
+        )}
+      >
+        <p
+          className={cn(
+            "mb-3 text-[12px] leading-relaxed text-muted",
+            step === "edit" && "hidden lg:block",
+          )}
+        >
+          {HINTS[step]}
+        </p>
         {step === "pick" && <StepPick />}
         {step === "edit" && <StepEdit />}
         {step === "layout" && <StepLayout />}
@@ -115,7 +132,7 @@ export function EasyWizard() {
       </main>
 
       {!isLast && (
-        <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/95 backdrop-blur-md">
+        <footer className="z-20 shrink-0 border-t border-line bg-surface/95 backdrop-blur-md">
           <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-8">
             <Button variant="outline" onClick={prevStep} disabled={index === 0}>
               <ChevronRight />

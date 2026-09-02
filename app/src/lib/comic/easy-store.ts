@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { saveProject } from "./db";
 import {
+  AUTO_LAYOUT,
   addShotBubble,
   buildEasyProject,
   cellsPerPage,
@@ -11,6 +12,7 @@ import {
   type EasyMusic,
   type EasyPagePlan,
   type EasyShot,
+  type ShotKind,
 } from "./easy";
 import { PAGE_SIZES } from "./types";
 import type {
@@ -37,7 +39,13 @@ export const EASY_STEPS: { id: EasyStep; label: string }[] = [
 
 const SESSION_KEY = "kader.easy.v1";
 
-const DEFAULT_PLAN: EasyPagePlan = { layoutKey: "4", panelKind: "rect" };
+// Auto is the default: panels are made from the pictures and fill the page.
+const DEFAULT_PLAN: EasyPagePlan = {
+  layoutKey: AUTO_LAYOUT,
+  panelKind: "rect",
+  autoCount: 4,
+  gutter: "normal",
+};
 
 interface Persisted {
   title: string;
@@ -69,7 +77,13 @@ export interface EasyState extends Persisted {
   setSize: (id: string) => void;
   setDirection: (d: ReadingDirection) => void;
 
-  addShot: (assetId: string, name: string, sourceRatio: number) => void;
+  addShot: (
+    assetId: string,
+    name: string,
+    sourceRatio: number,
+    kind?: ShotKind,
+    duration?: number,
+  ) => void;
   removeShot: (id: string) => void;
   moveShot: (id: string, delta: number) => void;
   setActiveShot: (id: string) => void;
@@ -88,6 +102,15 @@ export interface EasyState extends Persisted {
     }>,
   ) => void;
   setAdjust: (patch: Partial<ImageAdjust>) => void;
+  patchVideo: (
+    patch: Partial<{
+      trimStart: number;
+      trimEnd: number;
+      muted: boolean;
+      volume: number;
+      speed: number;
+    }>,
+  ) => void;
   touchFrame: () => void;
 
   addBubble: (kind: BubbleKind) => void;
@@ -210,8 +233,8 @@ export const useEasy = create<EasyState>((set, get) => {
     setSize: (id) => commit({ sizeId: id }),
     setDirection: (d) => commit({ direction: d }),
 
-    addShot: (assetId, name, sourceRatio) => {
-      const shot = newShot(assetId, name, sourceRatio);
+    addShot: (assetId, name, sourceRatio, kind = "image", duration = 0) => {
+      const shot = newShot(assetId, name, sourceRatio, kind, duration);
       const shots = [...get().shots, shot];
       commit({ shots, activeShotId: get().activeShotId ?? shot.id });
     },
@@ -261,6 +284,13 @@ export const useEasy = create<EasyState>((set, get) => {
         ...img.adjust,
         ...patch,
       };
+      commit({ shots: [...get().shots] });
+    },
+    patchVideo: (patch) => {
+      const shot = get().activeShot();
+      const media = shot ? shotImage(shot) : null;
+      if (!media || media.type !== "video") return;
+      Object.assign(media, patch);
       commit({ shots: [...get().shots] });
     },
     touchFrame: () => commit({ shots: [...get().shots] }),

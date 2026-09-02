@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppNav } from "@/lib/comic/nav";
-import { BookOpen, Maximize2, MousePointerClick, Pause, Play, RotateCcw, X } from "lucide-react";
+import {
+  BookOpen,
+  Film,
+  Maximize2,
+  MousePointerClick,
+  Pause,
+  Play,
+  RotateCcw,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { applyTone } from "@/lib/comic/audio-graph";
+import { hasRead, markRead } from "@/lib/comic/seen";
 import { drawPage } from "@/lib/comic/draw";
 import { collectAssetIds, ensureAllUrls, getProject, mediaUrl } from "@/lib/comic/db";
 import {
@@ -30,6 +40,8 @@ import {
 import type { ComicProject } from "@/lib/comic/types";
 
 const CAM_MS = 740;
+/** How long a first-time clip holds the page. */
+const VIDEO_HOLD_MS = 2000;
 const FADE_MS = 560;
 const VEIL_MS = 280;
 const CINEMA = "#07080c";
@@ -61,9 +73,14 @@ export function ReaderView({ id }: { id: string }) {
   const veil = useRef({ t0: 0, dir: 0 as 0 | 1 | -1 });
   const anim = useRef(0);
   const reduced = useRef(false);
+  /** First time through, a clip gets its opening seconds before you can skip. */
+  const seenBefore = useRef(false);
+  const gateUntil = useRef(0);
+  const [gateLeft, setGateLeft] = useState(0);
 
   useEffect(() => {
     reduced.current = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    seenBefore.current = hasRead(id);
     void (async () => {
       const p = await getProject(id);
       if (!p) return;
@@ -122,9 +139,19 @@ export function ReaderView({ id }: { id: string }) {
     setHint(false);
     bumpHud();
     if (ended) return;
+    // A clip you have not seen yet holds the page for its first two seconds.
+    const wait = gateUntil.current - performance.now();
+    if (wait > 0) {
+      setGateLeft(Math.ceil(wait / 100) / 10);
+      return;
+    }
     const next = advanceReveal(revealed, beats.length, pageIndex, project.pages.length);
     if (next.ended) {
       setEnded(true);
+      markRead(id);
+      seenBefore.current = true;
+      gateUntil.current = 0;
+      setGateLeft(0);
       bumpHud();
       return;
     }
@@ -159,6 +186,32 @@ export function ReaderView({ id }: { id: string }) {
   useEffect(() => {
     bumpHud();
   }, [pageIndex]);
+
+  // Arm/disarm the clip hold as beats are revealed, and count it down for the
+  // badge so the reader can see why the page is not turning yet.
+  useEffect(() => {
+    if (!page) return;
+    if (seenBefore.current) {
+      gateUntil.current = 0;
+      setGateLeft(0);
+      return;
+    }
+    const fresh = beats[revealed - 1]?.itemIds ?? [];
+    const hasVideo = page.items.some((it) => it.type === "video" && fresh.includes(it.id));
+    if (!hasVideo) return;
+    gateUntil.current = performance.now() + VIDEO_HOLD_MS;
+    setGateLeft(VIDEO_HOLD_MS / 1000);
+    const timer = window.setInterval(() => {
+      const left = gateUntil.current - performance.now();
+      if (left <= 0) {
+        setGateLeft(0);
+        window.clearInterval(timer);
+        return;
+      }
+      setGateLeft(Math.ceil(left / 100) / 10);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [page, revealed]);
 
   useEffect(() => {
     if (!page) return;
@@ -411,7 +464,7 @@ export function ReaderView({ id }: { id: string }) {
       {/* Bottom HUD — where you are in the story: page dots + beats on this page. */}
       <div
         className={`pointer-events-none fixed inset-x-0 bottom-0 z-10 transition-opacity duration-300 ${
-          hud || hint ? "opacity-100" : "opacity-0"
+          hud || hint || gateLeft > 0 ? "opacity-100" : "opacity-0"
         }`}
       >
         <div className="scrim-bottom pointer-events-none absolute inset-x-0 bottom-0 h-24" />
@@ -426,9 +479,19 @@ export function ReaderView({ id }: { id: string }) {
               />
             ))}
           </div>
-          <div className="num rounded-full bg-bg/70 px-2.5 py-1 text-[11px] text-muted backdrop-blur-md">
-            {pageIndex + 1} / {pageCount}
-          </div>
+          {gateLeft > 0 ? (
+            <div className="flex items-center gap-1.5 rounded-full bg-bg/85 px-3 py-1.5 text-[11px] text-fg shadow-[var(--shadow-lift)] backdrop-blur-md">
+              <Film className="size-3.5 text-brand" />
+              ویدئو در حال پخش
+              <span dir="ltr" className="num text-muted">
+                {gateLeft.toFixed(1)}s
+              </span>
+            </div>
+          ) : (
+            <div className="num rounded-full bg-bg/70 px-2.5 py-1 text-[11px] text-muted backdrop-blur-md">
+              {pageIndex + 1} / {pageCount}
+            </div>
+          )}
         </div>
       </div>
 
