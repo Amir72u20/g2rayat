@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,13 +25,18 @@ export function EasyWizard() {
   const nextStep = useEasy((s) => s.nextStep);
   const prevStep = useEasy((s) => s.prevStep);
   const restore = useEasy((s) => s.restore);
+  const rehydrateAssets = useEasy((s) => s.rehydrateAssets);
+  const mainRef = useRef<HTMLElement>(null);
   const reset = useEasy((s) => s.reset);
   const shots = useEasy((s) => s.shots);
   const [leaveOpen, setLeaveOpen] = useState(false);
 
   useEffect(() => {
     restore();
-  }, [restore]);
+    // A reload keeps the wizard's state but not its blob URLs; without this the
+    // restored pictures and clips come back blank.
+    void rehydrateAssets();
+  }, [restore, rehydrateAssets]);
 
   const index = EASY_STEPS.findIndex((s) => s.id === step);
   const canGoNext = step === "pick" ? shots.length > 0 : true;
@@ -43,7 +48,7 @@ export function EasyWizard() {
       return;
     }
     nextStep();
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    mainRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function leave() {
@@ -109,6 +114,7 @@ export function EasyWizard() {
       </header>
 
       <main
+        ref={mainRef}
         className={cn(
           "mx-auto w-full max-w-5xl flex-1 px-4 py-3 md:px-8 md:py-4",
           // The picture editor manages its own zones; every other step scrolls.

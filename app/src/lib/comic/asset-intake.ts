@@ -1,4 +1,4 @@
-import { adoptBlobUrl, putAsset, type AssetRecord } from "./db";
+import { adoptBlobUrl, adoptThumbUrl, putAsset, type AssetRecord } from "./db";
 import type { AssetKind } from "./types";
 import { uid } from "@/lib/utils";
 
@@ -14,7 +14,65 @@ export function kindOf(file: File): AssetKind | null {
   return null;
 }
 
+/** Grab a frame from a clip so it has a poster like every other asset. */
+async function videoThumb(file: File): Promise<Blob | undefined> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.src = url;
+    const ready = await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const done = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(ok);
+      };
+      video.onloadeddata = () => done(true);
+      video.onerror = () => done(false);
+      // Some containers only decode after a seek; others never load in a
+      // background tab. Either way the poster is optional, so give up quietly.
+      setTimeout(() => done(video.readyState >= 2), 4000);
+      try {
+        video.load();
+      } catch {
+        done(false);
+      }
+    });
+    if (!ready || !video.videoWidth) return undefined;
+    const target = Math.min(0.2, (video.duration || 1) / 2);
+    if (Number.isFinite(target) && target > 0) {
+      await new Promise<void>((resolve) => {
+        const done = () => resolve();
+        video.onseeked = done;
+        setTimeout(done, 1200);
+        try {
+          video.currentTime = target;
+        } catch {
+          done();
+        }
+      });
+    }
+    const scale = 360 / Math.max(video.videoWidth, video.videoHeight);
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(video.videoWidth * scale));
+    cv.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const ctx = cv.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(video, 0, 0, cv.width, cv.height);
+    return await new Promise((res) => cv.toBlob((b) => res(b || undefined), "image/jpeg", 0.8));
+  } catch {
+    return undefined;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function makeThumb(file: File, kind: AssetKind): Promise<Blob | undefined> {
+  if (kind === "video") return videoThumb(file);
   if (kind !== "image") return undefined;
   const bmp = await createImageBitmap(file);
   const cv = document.createElement("canvas");
@@ -99,7 +157,7 @@ export async function intakeFile(file: File): Promise<AssetRecord | null> {
   rec.height = probe.height;
   rec.duration = probe.duration;
   rec.thumb = await makeThumb(file, kind).catch(() => undefined);
-  if (rec.thumb) adoptBlobUrl(rec.id, file, rec.thumb);
+  if (rec.thumb) adoptThumbUrl(rec.id, rec.thumb);
   await putAsset(rec);
   return rec;
 }

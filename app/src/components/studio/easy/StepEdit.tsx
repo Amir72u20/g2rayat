@@ -29,8 +29,14 @@ import {
 } from "@/lib/comic/geometry";
 import { FRAME_RATIOS, shotMedia, shotVideo, type EasyShot } from "@/lib/comic/easy";
 import { useEasy } from "@/lib/comic/easy-store";
-import { thumbUrl } from "@/lib/comic/db";
-import { getMediaBag, pauseVideo, playVideo, seekVideo } from "@/lib/comic/media-cache";
+import { hasThumb, thumbUrl } from "@/lib/comic/db";
+import {
+  getMediaBag,
+  loadVideoAsset,
+  pauseVideo,
+  playVideo,
+  seekVideo,
+} from "@/lib/comic/media-cache";
 import type { BubbleItem, BubbleKind, ComicItem, VideoItem } from "@/lib/comic/types";
 import { cn } from "@/lib/utils";
 import { FrameCanvas, type ScenePoint } from "./FrameCanvas";
@@ -104,6 +110,23 @@ export function StepEdit() {
   useEffect(() => {
     if (!video && tool === "clip") setTool("crop");
   }, [video, tool]);
+
+  // Clips often arrive before the browser knows their length or shape: start
+  // decoding them all, then fill the numbers in as they land.
+  const syncClipMeta = useEasy((s) => s.syncClipMeta);
+  const clipKey = shots
+    .filter((s) => s.kind === "video")
+    .map((s) => s.assetId)
+    .join(",");
+  useEffect(() => {
+    if (!clipKey) return;
+    clipKey.split(",").forEach((assetId) => loadVideoAsset(assetId));
+    if (!syncClipMeta()) return;
+    const timer = window.setInterval(() => {
+      if (!syncClipMeta()) window.clearInterval(timer);
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [clipKey, syncClipMeta]);
 
   if (!shot) {
     return (
@@ -735,7 +758,7 @@ function ShotStrip({
               active ? "shadow-[0_0_0_1.5px_var(--color-brand)]" : "shadow-[var(--shadow-border)]",
             )}
           >
-            {thumbUrl(s.assetId) ? (
+            {hasThumb(s.assetId) ? (
               <img src={thumbUrl(s.assetId)} alt="" className="aspect-square w-full object-cover" />
             ) : (
               <span className="grid aspect-square w-full place-items-center text-muted">

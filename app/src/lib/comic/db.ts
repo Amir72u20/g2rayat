@@ -56,16 +56,13 @@ export async function listProjects(): Promise<ProjectMeta[]> {
   const db = await openDb();
   const store = db.transaction("projects").objectStore("projects");
   const rows = (await req(store.getAll())) as ProjectRecord[];
-  return rows
-    .map(({ json: _j, ...meta }) => meta)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  return rows.map(({ json: _j, ...meta }) => meta).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export async function getProject(id: string): Promise<ComicProject | null> {
   const db = await openDb();
   const row = (await req(db.transaction("projects").objectStore("projects").get(id))) as
-    | ProjectRecord
-    | undefined;
+    ProjectRecord | undefined;
   return row?.json ?? null;
 }
 
@@ -104,14 +101,15 @@ export async function putAsset(record: AssetRecord) {
 export async function getAsset(id: string): Promise<AssetRecord | null> {
   const db = await openDb();
   const row = (await req(db.transaction("assets").objectStore("assets").get(id))) as
-    | AssetRecord
-    | undefined;
+    AssetRecord | undefined;
   return row ?? null;
 }
 
 export async function listAssets(kind?: AssetKind): Promise<AssetMeta[]> {
   const db = await openDb();
-  const rows = (await req(db.transaction("assets").objectStore("assets").getAll())) as AssetRecord[];
+  const rows = (await req(
+    db.transaction("assets").objectStore("assets").getAll(),
+  )) as AssetRecord[];
   return rows
     .filter((r) => (kind ? r.kind === kind : true))
     .map(({ blob: _b, thumb: _t, ...meta }) => meta)
@@ -155,6 +153,21 @@ export function adoptBlobUrl(id: string, blob: Blob, thumb?: Blob) {
   return url;
 }
 
+/** Add (or replace) just the poster for an asset, leaving its media URL alone. */
+export function adoptThumbUrl(id: string, thumb: Blob) {
+  const prev = thumbCache.get(id);
+  if (prev) URL.revokeObjectURL(prev);
+  const url = URL.createObjectURL(thumb);
+  thumbCache.set(id, url);
+  return url;
+}
+
+/** True only when a real poster exists — `thumbUrl` otherwise falls back to the
+ *  media itself, and a clip's blob URL in an <img> renders as a blank box. */
+export function hasThumb(id: string) {
+  return thumbCache.has(id);
+}
+
 export async function ensureAssetUrl(id: string) {
   if (urlCache.has(id)) return urlCache.get(id)!;
   const rec = await getAsset(id);
@@ -188,7 +201,10 @@ export function collectAssetIds(project: ComicProject) {
         ids.add(it.assetId);
         if (it.posterAssetId) ids.add(it.posterAssetId);
       }
-      if ((it.type === "panel" || it.type === "image" || it.type === "video") && it.story?.audio?.assetId) {
+      if (
+        (it.type === "panel" || it.type === "image" || it.type === "video") &&
+        it.story?.audio?.assetId
+      ) {
         ids.add(it.story.audio.assetId);
       }
     }

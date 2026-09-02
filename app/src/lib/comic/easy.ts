@@ -67,10 +67,12 @@ export const AUTO_LAYOUT = "auto";
 
 export type GutterSize = "thin" | "normal" | "wide";
 
+/** Gutter as a share of page width. A comic gutter is a line, not a margin —
+ *  on an 800pt page these are roughly 6, 11 and 20 points. */
 export const GUTTERS: Record<GutterSize, number> = {
-  thin: 0.014,
-  normal: 0.022,
-  wide: 0.036,
+  thin: 0.008,
+  normal: 0.014,
+  wide: 0.026,
 };
 
 export interface EasyPagePlan {
@@ -258,7 +260,9 @@ export function mosaicRects(
   const n = ratios.length;
   if (!n) return [];
   const gap = pageW * gutter;
-  const margin = gap;
+  // Full bleed: the mosaic runs to the paper's edge, so the only white the
+  // reader sees is the gutter between frames.
+  const margin = 0;
   const availW = pageW - margin * 2;
   const availH = pageH - margin * 2;
 
@@ -554,7 +558,9 @@ function buildAutoPage(
       w: r.w,
       h: r.h,
       kind: plan.panelKind,
-      radius: plan.panelKind === "round" || plan.panelKind === "circle" ? 28 : 4,
+      // A thinner keyline: with frames this close, a heavy border reads as a gap.
+      stroke: 3,
+      radius: plan.panelKind === "round" || plan.panelKind === "circle" ? 20 : 2,
       story: defaultStory(i + 1),
     });
     insertItem(page, panel);

@@ -1,8 +1,10 @@
 import { create } from "zustand";
-import { saveProject } from "./db";
+import { ensureAllUrls, saveProject } from "./db";
+import { getMediaBag } from "./media-cache";
 import {
   AUTO_LAYOUT,
   addShotBubble,
+  closestRatioId,
   buildEasyProject,
   cellsPerPage,
   newShot,
@@ -85,6 +87,7 @@ export interface EasyState extends Persisted {
     duration?: number,
   ) => void;
   removeShot: (id: string) => void;
+  clearShots: () => void;
   moveShot: (id: string, delta: number) => void;
   setActiveShot: (id: string) => void;
   activeShot: () => EasyShot | null;
@@ -112,6 +115,10 @@ export interface EasyState extends Persisted {
     }>,
   ) => void;
   touchFrame: () => void;
+  /** Fill in clip length/aspect once the browser has actually decoded them. */
+  syncClipMeta: () => boolean;
+  /** Re-open blob URLs for restored shots (a reload drops the URL cache). */
+  rehydrateAssets: () => Promise<void>;
 
   addBubble: (kind: BubbleKind) => void;
   selectBubble: (id: string | null) => void;
@@ -245,6 +252,7 @@ export const useEasy = create<EasyState>((set, get) => {
         activeShotId: get().activeShotId === id ? (shots[0]?.id ?? null) : get().activeShotId,
       });
     },
+    clearShots: () => commit({ shots: [], activeShotId: null, selectedBubbleId: null }),
     moveShot: (id, delta) => {
       const shots = [...get().shots];
       const i = shots.findIndex((s) => s.id === id);
@@ -292,6 +300,45 @@ export const useEasy = create<EasyState>((set, get) => {
       if (!media || media.type !== "video") return;
       Object.assign(media, patch);
       commit({ shots: [...get().shots] });
+    },
+    rehydrateAssets: async () => {
+      const ids = get().shots.map((s) => s.assetId);
+      if (!ids.length) return;
+      await ensureAllUrls(ids);
+      commit({});
+    },
+    syncClipMeta: () => {
+      const bag = getMediaBag();
+      let missing = false;
+      let changed = false;
+      get().shots.forEach((shot) => {
+        if (shot.kind !== "video") return;
+        const media = shotImage(shot);
+        if (!media || media.type !== "video") return;
+        const el = bag.videos[shot.assetId];
+        const duration = el && Number.isFinite(el.duration) ? el.duration : 0;
+        const ratio = el && el.videoHeight ? el.videoWidth / el.videoHeight : 0;
+        if (!duration || !ratio) {
+          // Probing can time out on a phone; keep asking until it decodes.
+          missing = true;
+          return;
+        }
+        if (!media.duration || media.duration < 0.05) {
+          media.duration = duration;
+          if (!media.trimEnd) media.trimEnd = duration;
+          changed = true;
+        }
+        if (Math.abs((shot.sourceRatio || 1) - ratio) > 0.02) {
+          shot.sourceRatio = ratio;
+          media.sourceRatio = ratio;
+          // The first frame was guessed from a failed probe — re-frame it now.
+          const better = closestRatioId(ratio);
+          if (better !== shot.ratioId) setShotRatio(shot, better);
+          changed = true;
+        }
+      });
+      if (changed) commit({ shots: [...get().shots] });
+      return missing;
     },
     touchFrame: () => commit({ shots: [...get().shots] }),
 

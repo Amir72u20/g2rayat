@@ -109,17 +109,22 @@ export function FrameCanvas({
     const pump = () => {
       if (!live) return;
       const bag = getMediaBag();
-      let playing = false;
+      let busy = false;
       page.items.forEach((it) => {
         if (it.type !== "video") return;
         const el = bag.videos[it.assetId];
-        if (el && !el.paused) {
+        if (!el || el.readyState < 2) {
+          // Still decoding: keep asking, so the first frame appears by itself.
+          busy = true;
+          return;
+        }
+        if (!el.paused) {
           tickVideoClip(it);
-          playing = true;
+          busy = true;
         }
       });
-      if (playing) schedule();
-      timer = window.setTimeout(pump, 60);
+      if (busy) schedule();
+      timer = window.setTimeout(pump, busy ? 60 : 250);
     };
     let timer = window.setTimeout(pump, 60);
 

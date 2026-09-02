@@ -50,7 +50,9 @@ it is already clipped by a panel.
    panels, images and bubbles, so everything stays editable in the studio.
 
 **Automatic panels** (`mosaicRects` in `src/lib/comic/easy.ts`) are a justified
-mosaic: the pictures are split into rows — every way of cutting the sequence is
+mosaic that bleeds to the paper's edge — the only white a reader sees is the
+gutter between frames (roughly 6, 11 or 20 points on an 800pt page, with a 3pt
+keyline). It works like this: the pictures are split into rows — every way of cutting the sequence is
 tried, at most 128 for eight pictures, and the split whose natural height is
 closest to the page wins — then every row fills the width and the rows are
 scaled together to fill the height. The page comes out full, with only the
@@ -132,6 +134,15 @@ only limit is that a grabbable sliver stays on paper. Order comes from magnetic
 alignment instead — while `snap` is on, an item's edges and centre pull to the
 page's edges/centre *and* to every other item on the page, with the guide drawn
 only while the pull is active.
+
+## Clips
+
+Every picked clip gets a poster frame at intake (`asset-intake.ts` decodes it,
+seeks ~0.2s in and grabs a frame), so a video is never a blank tile — a clip's
+own blob URL in an `<img>` renders as nothing, which is what "the upload failed"
+usually turns out to be. Length and aspect are filled in from the decoded
+element when a phone's metadata probe comes back empty, and the easy builder's
+frame keeps repainting while a clip is still decoding.
 
 ## Persistence
 

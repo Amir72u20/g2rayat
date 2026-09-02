@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { intakeFile } from "@/lib/comic/asset-intake";
-import { ensureAssetUrl, listAssets, thumbUrl } from "@/lib/comic/db";
+import { ensureAssetUrl, hasThumb, listAssets, thumbUrl } from "@/lib/comic/db";
 import { useEasy } from "@/lib/comic/easy-store";
 import type { AssetMeta } from "@/lib/comic/types";
 
@@ -16,6 +16,7 @@ export function StepPick() {
   const addShot = useEasy((s) => s.addShot);
   const removeShot = useEasy((s) => s.removeShot);
   const moveShot = useEasy((s) => s.moveShot);
+  const clearShots = useEasy((s) => s.clearShots);
   const imageRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const [library, setLibrary] = useState<AssetMeta[]>([]);
@@ -124,7 +125,7 @@ export function StepPick() {
                 >
                   <X className="size-3.5" />
                 </button>
-                {thumbUrl(shot.assetId) ? (
+                {hasThumb(shot.assetId) ? (
                   <img
                     src={thumbUrl(shot.assetId)}
                     alt=""
@@ -194,7 +195,7 @@ export function StepPick() {
                 }
                 className="tap relative aspect-square overflow-hidden rounded-lg bg-elevated shadow-[var(--shadow-border)]"
               >
-                {thumbUrl(a.id) ? (
+                {hasThumb(a.id) ? (
                   <img src={thumbUrl(a.id)} alt="" className="size-full object-cover" />
                 ) : (
                   <span className="grid size-full place-items-center text-[10px] text-muted">
@@ -223,11 +224,7 @@ export function StepPick() {
       )}
 
       {shots.length > 0 && (
-        <Button
-          variant="ghost"
-          className="text-danger"
-          onClick={() => shots.forEach((s) => removeShot(s.id))}
-        >
+        <Button variant="ghost" className="text-danger" onClick={clearShots}>
           <Trash2 />
           پاک‌کردن همه
         </Button>
