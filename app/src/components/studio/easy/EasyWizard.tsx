@@ -61,7 +61,12 @@ export function EasyWizard() {
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg text-fg">
       <header className="z-20 shrink-0 border-b border-line bg-bg/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 md:px-8">
+        <div
+          className={cn(
+            "mx-auto flex max-w-5xl items-center gap-2 px-4 md:px-8",
+            step === "edit" ? "py-2" : "py-3",
+          )}
+        >
           <Button variant="ghost" size="icon-sm" aria-label="بستن" onClick={leave}>
             <X />
           </Button>
@@ -79,7 +84,12 @@ export function EasyWizard() {
 
         {/* Step rail: every step stays reachable, so going back never means
             starting over — the wizard keeps all of its state. */}
-        <nav className="mx-auto flex max-w-5xl gap-1 px-4 pb-3 md:px-8">
+        <nav
+          className={cn(
+            "mx-auto flex max-w-5xl gap-1 px-4 md:px-8",
+            step === "edit" ? "pb-1.5" : "pb-3",
+          )}
+        >
           {EASY_STEPS.map((s, i) => {
             const done = i < index;
             const active = i === index;
@@ -102,6 +112,9 @@ export function EasyWizard() {
                 <span
                   className={cn(
                     "truncate text-[11px]",
+                    // While editing, the rail is just four bars — the labels
+                    // are chrome the picture needs the room back from.
+                    step === "edit" && "hidden lg:block",
                     active ? "font-semibold text-fg" : "text-muted group-hover:text-fg",
                   )}
                 >
@@ -116,7 +129,8 @@ export function EasyWizard() {
       <main
         ref={mainRef}
         className={cn(
-          "mx-auto w-full max-w-5xl flex-1 px-4 py-3 md:px-8 md:py-4",
+          "mx-auto w-full max-w-5xl flex-1 px-4 md:px-8 md:py-4",
+          step === "edit" ? "py-1.5" : "py-3",
           // The picture editor manages its own zones; every other step scrolls.
           step === "edit"
             ? "flex min-h-0 flex-col overflow-hidden lg:overflow-y-auto"
@@ -139,12 +153,24 @@ export function EasyWizard() {
 
       {!isLast && (
         <footer className="z-20 shrink-0 border-t border-line bg-surface/95 backdrop-blur-md">
-          <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] md:px-8">
-            <Button variant="outline" onClick={prevStep} disabled={index === 0}>
+          <div
+            className={cn(
+              "mx-auto flex max-w-5xl items-center gap-2 px-4 md:px-8",
+              step === "edit"
+                ? "py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]"
+                : "py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]",
+            )}
+          >
+            <Button
+              variant="outline"
+              size={step === "edit" ? "sm" : "default"}
+              onClick={prevStep}
+              disabled={index === 0}
+            >
               <ChevronRight />
               قبلی
             </Button>
-            <Button className="flex-1" onClick={tryNext}>
+            <Button className="flex-1" size={step === "edit" ? "sm" : "default"} onClick={tryNext}>
               {step === "layout" ? "ذخیره و پیش‌نمایش" : "ذخیره و مرحلهٔ بعد"}
               <ChevronLeft />
             </Button>

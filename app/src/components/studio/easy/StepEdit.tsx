@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ChevronDown,
   Crop,
   Film,
   FlipHorizontal,
@@ -66,6 +67,13 @@ const BUBBLE_SKINS: { n: string; fill: string; color: string; alpha: number; str
   { n: "بی‌قاب", fill: "#ffffff", color: "#ffffff", alpha: 0, stroke: 0 },
 ];
 
+const TOOL_LABELS: Record<Tool, string> = {
+  crop: "قاب تصویر",
+  clip: "ویدئو",
+  color: "رنگ و نور",
+  bubble: "حباب گفتگو",
+};
+
 const COLOR_PRESETS: {
   n: string;
   a: { brightness: number; contrast: number; saturate: number; warmth: number };
@@ -77,6 +85,31 @@ const COLOR_PRESETS: {
   { n: "کنتراست", a: { brightness: 0.98, contrast: 1.35, saturate: 1.15, warmth: 0 } },
   { n: "کهنه", a: { brightness: 1.02, contrast: 0.92, saturate: 0.75, warmth: 0.7 } },
 ];
+
+/** Soft magnets while dragging a bubble: the frame's centre lines and its safe
+ *  margins pull gently, so a bubble lands square without feeling locked. */
+function magnetBubble(it: BubbleItem, frame: { w: number; h: number }) {
+  const snap = frame.w * 0.02;
+  const margin = frame.w * 0.04;
+  const pull = (value: number, target: number) =>
+    Math.abs(value - target) <= snap ? target : value;
+  const before = { x: it.x, y: it.y };
+  const cx = it.x + it.w / 2;
+  const cy = it.y + it.h / 2;
+  if (Math.abs(cx - frame.w / 2) <= snap) it.x = frame.w / 2 - it.w / 2;
+  else {
+    it.x = pull(it.x, margin);
+    it.x = pull(it.x + it.w, frame.w - margin) - it.w;
+  }
+  if (Math.abs(cy - frame.h / 2) <= snap) it.y = frame.h / 2 - it.h / 2;
+  else {
+    it.y = pull(it.y, margin);
+    it.y = pull(it.y + it.h, frame.h - margin) - it.h;
+  }
+  // The tail rides along with whatever the magnet moved.
+  it.tx += it.x - before.x;
+  it.ty += it.y - before.y;
+}
 
 interface Drag {
   mode: "move" | "resize" | "tail" | "rotate" | "crop";
@@ -99,16 +132,21 @@ export function StepEdit() {
   const setActiveShot = useEasy((s) => s.setActiveShot);
   const selectedBubbleId = useEasy((s) => s.selectedBubbleId);
   const selectBubble = useEasy((s) => s.selectBubble);
-  const touchFrame = useEasy((s) => s.touchFrame);
-  const [tool, setTool] = useState<Tool>("crop");
+  const endLiveEdit = useEasy((s) => s.endLiveEdit);
+  const [tool, setTool] = useState<Tool | null>(null);
   const drag = useRef<Drag | null>(null);
+  // Dragging draws straight to the canvas; the store only hears about it once
+  // the finger lifts, which is what makes a bubble feel like it sticks to it.
+  const repaint = useRef<(() => void) | null>(null);
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+  const points = useRef(new Map<number, { x: number; y: number }>());
 
   const shot = shots.find((s) => s.id === activeShotId) ?? shots[0] ?? null;
   const video = shot ? shotVideo(shot) : null;
 
-  // A clip's own tab replaces the crop tab's job for timing and sound.
+  // A clip's tab only exists while a clip is selected.
   useEffect(() => {
-    if (!video && tool === "clip") setTool("crop");
+    if (!video && tool === "clip") setTool(null);
   }, [video, tool]);
 
   // Clips often arrive before the browser knows their length or shape: start
@@ -140,10 +178,20 @@ export function StepEdit() {
   const selected =
     (frame.items.find((i) => i.id === selectedBubbleId) as BubbleItem | undefined) ?? null;
 
-  function onDown(pt: ScenePoint) {
+  function onDown(pt: ScenePoint, e: React.PointerEvent) {
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (points.current.size === 2) {
+      // Second finger: pinch the picture (or the selected bubble) instead.
+      const [a, b] = [...points.current.values()];
+      const media = shotMedia(shot!);
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: media?.zoom ?? 1 };
+      drag.current = null;
+      return;
+    }
     const sel = selected;
     if (sel) {
-      const corner = resizeCorner(pt, sel, pt.hs);
+      // A generous grab radius: fingers are not mouse pointers.
+      const corner = resizeCorner(pt, sel, pt.hs * 1.25);
       if (corner === "tail") {
         drag.current = { mode: "tail", id: sel.id, corner: null, last: pt };
         return;
@@ -159,137 +207,166 @@ export function StepEdit() {
     }
     const hit = hitTest(frame, pt.x, pt.y);
     if (hit && hit.type === "bubble") {
-      selectBubble(hit.id);
+      if (hit.id !== selectedBubbleId) selectBubble(hit.id);
       drag.current = { mode: "move", id: hit.id, corner: null, last: pt };
       return;
     }
     // Nothing under the finger: pan the picture inside its frame.
-    selectBubble(null);
+    if (selectedBubbleId) selectBubble(null);
     drag.current = { mode: "crop", id: null, corner: null, last: pt };
   }
 
   function onMove(pt: ScenePoint, e: React.PointerEvent) {
+    if (points.current.has(e.pointerId)) {
+      points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    const media = shot ? shotMedia(shot) : null;
+    if (pinch.current && points.current.size >= 2 && media) {
+      const [a, b] = [...points.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const ratio = dist / Math.max(1, pinch.current.dist);
+      media.zoom = Math.min(4, Math.max(0.5, pinch.current.zoom * ratio));
+      repaint.current?.();
+      return;
+    }
     const d = drag.current;
     if (!d || !shot) return;
     const dx = pt.x - d.last.x;
     const dy = pt.y - d.last.y;
     d.last = pt;
     if (d.mode === "crop") {
-      const media = shotMedia(shot);
       if (media) panCrop(media, dx, dy);
-      touchFrame();
+      repaint.current?.();
       return;
     }
     const it = frame.items.find((i) => i.id === d.id);
     if (!it) return;
-    if (d.mode === "move") moveItem(it, dx, dy, frame);
-    else if (d.mode === "tail" && it.type === "bubble") {
+    if (d.mode === "move") {
+      moveItem(it, dx, dy, frame);
+      if (it.type === "bubble") magnetBubble(it, frame);
+    } else if (d.mode === "tail" && it.type === "bubble") {
       it.tx += dx;
       it.ty += dy;
     } else if (d.mode === "rotate") applyRotate(it, pt, e.shiftKey);
     else if (d.mode === "resize" && d.corner) applyResize(it, d.corner, dx, dy, null);
     clampItem(it, frame);
-    touchFrame();
+    repaint.current?.();
   }
 
-  function onUp() {
+  function onUp(_pt: ScenePoint, e: React.PointerEvent) {
+    points.current.delete(e.pointerId);
+    if (points.current.size < 2) pinch.current = null;
+    if (!drag.current && !pinch.current && points.current.size === 0) {
+      endLiveEdit();
+      return;
+    }
     drag.current = null;
+    if (points.current.size === 0) endLiveEdit();
   }
 
   const media = shotMedia(shot);
   const adjust = media?.adjust ?? { brightness: 1, contrast: 1, saturate: 1, warmth: 0 };
 
-  const tools: { value: Tool; label: React.ReactNode }[] = [
-    {
-      value: "crop",
-      label: (
-        <span className="flex items-center gap-1.5">
-          <Crop />
-          قاب
-        </span>
-      ),
-    },
-    ...(video
-      ? [
-          {
-            value: "clip" as Tool,
-            label: (
-              <span className="flex items-center gap-1.5">
-                <Film />
-                ویدئو
-              </span>
-            ),
-          },
-        ]
-      : []),
-    {
-      value: "color",
-      label: (
-        <span className="flex items-center gap-1.5">
-          <Palette />
-          رنگ
-        </span>
-      ),
-    },
-    {
-      value: "bubble",
-      label: (
-        <span className="flex items-center gap-1.5">
-          <MessageCircle />
-          حباب
-        </span>
-      ),
-    },
+  const tools: { value: Tool; label: string; icon: React.ReactNode }[] = [
+    { value: "crop", label: "قاب", icon: <Crop /> },
+    ...(video ? [{ value: "clip" as Tool, label: "ویدئو", icon: <Film /> }] : []),
+    { value: "color", label: "رنگ", icon: <Palette /> },
+    { value: "bubble", label: "حباب", icon: <MessageCircle /> },
   ];
 
-  const panel = (
+  const panelFor = (t: Tool | null) => (
     <>
-      {tool === "crop" && <CropPanel shot={shot} />}
-      {tool === "clip" && video && <ClipPanel item={video} />}
-      {tool === "color" && <ColorPanel adjust={adjust} />}
-      {tool === "bubble" && <BubblePanel selected={selected} />}
+      {t === "crop" && <CropPanel shot={shot!} />}
+      {t === "clip" && video && <ClipPanel item={video} />}
+      {t === "color" && <ColorPanel adjust={adjust} />}
+      {t === "bubble" && <BubblePanel selected={selected} />}
     </>
   );
+  const panel = panelFor(tool);
+  const deskPanel = panelFor(tool ?? "crop");
+
+  const openTool = (t: Tool) => setTool((cur) => (cur === t ? null : t));
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2 lg:grid lg:h-auto lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
-      {/* Zone one: the frame itself, which never scrolls away. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 lg:flex-none">
-        <div className="material min-h-0 flex-1 overflow-hidden rounded-2xl bg-elevated p-2 lg:h-[60dvh] lg:flex-none">
-          <div className="checker size-full overflow-hidden rounded-xl">
-            <FrameCanvas
-              page={frame}
-              tick={tick}
-              selectedId={selectedBubbleId}
-              onScenePointerDown={onDown}
-              onScenePointerMove={onMove}
-              onScenePointerUp={onUp}
-            />
+    <div className="flex h-full min-h-0 flex-col lg:grid lg:h-auto lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-4">
+      {/* The picture owns the screen: roughly four fifths of it on a phone. */}
+      <div className="relative flex min-h-0 flex-1 flex-col lg:flex-none">
+        <div className="checker min-h-0 flex-1 overflow-hidden rounded-2xl lg:h-[62dvh] lg:flex-none">
+          <FrameCanvas
+            page={frame}
+            tick={tick}
+            selectedId={selectedBubbleId}
+            repaintRef={repaint}
+            onScenePointerDown={onDown}
+            onScenePointerMove={onMove}
+            onScenePointerUp={onUp}
+          />
+        </div>
+
+        {/* Film strip — one tenth, right under the picture. */}
+        <ShotStrip shots={shots} activeId={shot.id} onPick={setActiveShot} />
+
+        {/* Tool bar — one tenth. Each button opens its own panel over the
+            strip, so the picture above never moves or shrinks. */}
+        <div className="relative shrink-0">
+          {tool && (
+            <div className="absolute inset-x-0 bottom-full z-20 mb-2 lg:hidden">
+              <div className="material max-h-[46dvh] space-y-3 overflow-y-auto overscroll-contain rounded-2xl bg-surface/97 p-3 shadow-[var(--shadow-lift)] backdrop-blur-md animate-rise">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold">{TOOL_LABELS[tool]}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTool(null)}
+                    className="tap ms-auto grid size-8 place-items-center rounded-full bg-elevated text-muted"
+                    aria-label="بستن ابزار"
+                  >
+                    <ChevronDown className="size-4" />
+                  </button>
+                </div>
+                {panel}
+              </div>
+            </div>
+          )}
+          <div className="flex gap-1.5 py-1.5 lg:hidden">
+            {tools.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => openTool(t.value)}
+                aria-pressed={tool === t.value}
+                className={cn(
+                  "tap flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] font-medium [&_svg]:size-5",
+                  tool === t.value
+                    ? "bg-brand text-brand-fg"
+                    : "bg-elevated text-muted shadow-[var(--shadow-border)]",
+                )}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
-        <p className="hidden text-center text-[11px] text-muted sm:block">
-          {selected
-            ? "حباب را بکش تا جابه‌جا شود · گوشه‌ها اندازه · نقطهٔ نوک، دنبالهٔ حباب"
-            : "روی تصویر بکش تا داخل قاب جابه‌جا شود"}
-        </p>
-
-        {/* Zone two: the film strip. */}
-        <ShotStrip shots={shots} activeId={shot.id} onPick={setActiveShot} />
       </div>
 
-      {/* Zone three: tools — a fixed, scrollable panel on a phone; a column on
-          a desktop. Either way the frame above stays visible. */}
-      <div className="flex shrink-0 flex-col gap-2 lg:gap-3">
+      {/* Desktop keeps the side column: everything open, nothing to unfold. */}
+      <div className="hidden flex-col gap-3 lg:flex">
         <Segmented
           ariaLabel="ابزار"
-          value={tool}
-          onChange={setTool}
+          value={tool ?? "crop"}
+          onChange={(v) => setTool(v as Tool)}
           className="w-full"
-          options={tools}
+          options={tools.map((t) => ({
+            value: t.value,
+            label: (
+              <span className="flex items-center gap-1.5">
+                {t.icon}
+                {t.label}
+              </span>
+            ),
+          }))}
         />
-        <div className="max-h-[34dvh] space-y-3 overflow-y-auto overscroll-contain pb-1 lg:max-h-none lg:overflow-visible">
-          {panel}
-        </div>
+        <div className="space-y-3">{deskPanel}</div>
       </div>
     </div>
   );
@@ -744,7 +821,7 @@ function ShotStrip({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="rail-x rail-fade no-scrollbar shrink-0 items-stretch py-1">
+    <div className="rail-x rail-fade no-scrollbar h-[74px] shrink-0 items-stretch py-1.5">
       {shots.map((s, i) => {
         const active = s.id === activeId;
         const bubbles = s.frame.items.filter((it: ComicItem) => it.type === "bubble").length;
@@ -754,14 +831,14 @@ function ShotStrip({
             type="button"
             onClick={() => onPick(s.id)}
             className={cn(
-              "tap relative w-16 shrink-0 overflow-hidden rounded-lg bg-elevated sm:w-20",
+              "tap relative aspect-square h-full shrink-0 overflow-hidden rounded-lg bg-elevated",
               active ? "shadow-[0_0_0_1.5px_var(--color-brand)]" : "shadow-[var(--shadow-border)]",
             )}
           >
             {hasThumb(s.assetId) ? (
-              <img src={thumbUrl(s.assetId)} alt="" className="aspect-square w-full object-cover" />
+              <img src={thumbUrl(s.assetId)} alt="" className="size-full object-cover" />
             ) : (
-              <span className="grid aspect-square w-full place-items-center text-muted">
+              <span className="grid size-full place-items-center text-muted">
                 <Film className="size-4" />
               </span>
             )}

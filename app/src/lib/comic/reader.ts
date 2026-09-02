@@ -142,9 +142,41 @@ export function cameraFor(beats: Beat[], count: number, page: ComicPage, pad = 0
 }
 
 /** First beat is the whole panel (small pad). Later beats pull back with a tight pad. */
+/**
+ * Where the reader looks.
+ *
+ * The first panel fills the view. The second joins it — two panels, both big.
+ * From the third on, the newest pair keeps the stage and everything read so far
+ * is pulled in around it, so the older panels shrink back rather than vanish.
+ * That is the "two big, the ones behind them small" rhythm of a comic page.
+ */
 export function revealCamera(beats: Beat[], count: number, page: ComicPage): CameraRect {
   const n = Math.max(1, Math.min(count, beats.length));
-  return cameraFor(beats, n, page, n === 1 ? 0.02 : 0.03);
+  if (n <= 2) return cameraFor(beats, n, page, n === 1 ? 0.02 : 0.03);
+
+  const focus = unionBounds(beats.slice(n - 2, n).map((b) => b.bounds));
+  const read = unionBounds(beats.slice(0, n).map((b) => b.bounds));
+  // Blend: mostly the newest pair, opened toward what has been read already.
+  const t = 0.34;
+  const box = {
+    x: focus.x + (read.x - focus.x) * t,
+    y: focus.y + (read.y - focus.y) * t,
+    w: 0,
+    h: 0,
+  };
+  const right = focus.x + focus.w + (read.x + read.w - (focus.x + focus.w)) * t;
+  const bottom = focus.y + focus.h + (read.y + read.h - (focus.y + focus.h)) * t;
+  box.w = Math.max(8, right - box.x);
+  box.h = Math.max(8, bottom - box.y);
+
+  const pad = 0.03;
+  const px = page.w * pad;
+  const py = page.h * pad;
+  const x = Math.max(0, box.x - px);
+  const y = Math.max(0, box.y - py);
+  const x2 = Math.min(page.w, box.x + box.w + px);
+  const y2 = Math.min(page.h, box.y + box.h + py);
+  return { x, y, w: Math.max(8, x2 - x), h: Math.max(8, y2 - y) };
 }
 
 export function coverFit(cam: CameraRect, viewW: number, viewH: number) {
@@ -216,13 +248,20 @@ export function ambientForPage(project: ComicProject, pageIndex: number) {
 }
 
 /** First background-music clip and the inclusive page range it covers. */
-export function musicSpan(project: ComicProject): { start: number; end: number; clip: NonNullable<ComicProject["pages"][0]["playback"]["ambientAudio"]> } | null {
+export function musicSpan(
+  project: ComicProject,
+): {
+  start: number;
+  end: number;
+  clip: NonNullable<ComicProject["pages"][0]["playback"]["ambientAudio"]>;
+} | null {
   for (let i = 0; i < project.pages.length; i++) {
     const clip = project.pages[i]?.playback.ambientAudio;
     if (!clip) continue;
     let end = i;
     if (clip.throughPage === -1 || clip.continuePages) end = project.pages.length - 1;
-    else if (clip.throughPage && clip.throughPage > 0) end = Math.min(project.pages.length - 1, clip.throughPage - 1);
+    else if (clip.throughPage && clip.throughPage > 0)
+      end = Math.min(project.pages.length - 1, clip.throughPage - 1);
     return { start: i, end, clip };
   }
   return null;

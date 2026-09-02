@@ -32,13 +32,19 @@ it is already clipped by a panel.
 
 1. **عکس‌ها** — two buttons, «افزودن عکس» and «افزودن ویدئو», plus the local
    library; their order is the comic's panel order.
-2. **ویرایش تکی** — each picture is edited *outside* any panel, on a frame of its
+2. **ویرایش تکی** — each picture is edited _outside_ any panel, on a frame of its
    own: crop ratio, zoom and pan, colour grade (presets + brightness / contrast /
    saturation / warmth), and speech bubbles with nine skins from classic white to
    glass and smoke. A clip adds its own tab for the trim range, speed, volume and
-   mute. On a phone the step is a fixed three-zone editor — frame, film strip,
-   tools — so the picture never scrolls away and every control is one thumb-reach
-   from the bottom.
+   mute. On a phone the step is a fixed three-zone editor split roughly
+   80 / 10 / 10: the picture takes the screen, a strip of the remaining pictures
+   sits right under it, and the tools are a row of four buttons at the bottom
+   that unfold their own panel _over_ the strip — so opening a tool never moves
+   or shrinks the picture, and every control is one thumb-reach from the edge.
+   Bubbles are dragged straight onto the canvas: a pointer move repaints the
+   frame instead of committing to the store, the commit happens once on release,
+   and a bubble softly snaps to the frame's centre lines and margins on the way.
+   Two fingers pinch the picture's zoom.
 3. **پنل و موسیقی** — collapsible cards for page setup, panels and music.
    Panels come in two modes: **پنجرهٔ خودکار**, the default, builds the page from
    the pictures themselves (1–8 per page, three gutter widths, live preview of
@@ -119,6 +125,15 @@ never hard-code a colour, radius, shadow or easing.
 - Keyboard: `/` focuses library search, `n` starts a comic, and the editor
   shortcuts below.
 
+## Reading a page
+
+Panels are revealed one tap at a time — the right side of the screen is the next
+panel, the left third the previous one — and the camera follows a two-big rhythm
+(`revealCamera` in `src/lib/comic/reader.ts`). The first panel fills the view.
+The second joins it, both still big. From the third on the newest _pair_ keeps
+the stage and everything already read is only blended in around it, so the older
+panels shrink back to the edges rather than disappear or squeeze the new one.
+
 ## Video in the reader
 
 A clip you have not seen before holds the page for two seconds after it is
@@ -132,7 +147,7 @@ skipped immediately.
 Items move freely: they may bleed off the page, overlap, or grow past it, and the
 only limit is that a grabbable sliver stays on paper. Order comes from magnetic
 alignment instead — while `snap` is on, an item's edges and centre pull to the
-page's edges/centre *and* to every other item on the page, with the guide drawn
+page's edges/centre _and_ to every other item on the page, with the guide drawn
 only while the pull is active.
 
 ## Clips
@@ -165,19 +180,19 @@ Import remaps all IDs so an existing comic is never overwritten.
 
 ## Shortcuts
 
-| Key | Action |
-| --- | --- |
-| Ctrl/Cmd+Z / Shift+Z or Y | Undo / Redo |
-| Ctrl/Cmd+S | Save |
-| Ctrl/Cmd+C / V / D | Copy / Paste / Duplicate |
-| Delete | Delete selection |
-| Ctrl/Cmd + wheel, pinch | Zoom |
-| Space+drag | Pan |
-| Arrows / Shift+Arrows | Nudge |
-| Esc | Select tool, close sheet |
-| ? | Shortcut sheet |
-| / (library) | Focus search |
-| n (library) | New comic |
-| Reader: arrows / space | Previous / next |
-| Reader: a fresh clip | Holds the page for its first 2s — until the comic has been read once |
-| Reader: tap or click | Right side: next · left third: back. Dragging never navigates. |
+| Key                       | Action                                                               |
+| ------------------------- | -------------------------------------------------------------------- |
+| Ctrl/Cmd+Z / Shift+Z or Y | Undo / Redo                                                          |
+| Ctrl/Cmd+S                | Save                                                                 |
+| Ctrl/Cmd+C / V / D        | Copy / Paste / Duplicate                                             |
+| Delete                    | Delete selection                                                     |
+| Ctrl/Cmd + wheel, pinch   | Zoom                                                                 |
+| Space+drag                | Pan                                                                  |
+| Arrows / Shift+Arrows     | Nudge                                                                |
+| Esc                       | Select tool, close sheet                                             |
+| ?                         | Shortcut sheet                                                       |
+| / (library)               | Focus search                                                         |
+| n (library)               | New comic                                                            |
+| Reader: arrows / space    | Previous / next                                                      |
+| Reader: a fresh clip      | Holds the page for its first 2s — until the comic has been read once |
+| Reader: tap or click      | Right side: next · left third: back. Dragging never navigates.       |

@@ -95,7 +95,12 @@ function pageOf(items: ComicPage["items"]): ComicPage {
     h: 100,
     items,
     background: { color: "#fff", assetId: "", zoom: 1, x: 0, y: 0, locked: false },
-    playback: { directorLock: false, defaultDelayMs: 1000, defaultReveal: "click", ambientAudio: null },
+    playback: {
+      directorLock: false,
+      defaultDelayMs: 1000,
+      defaultReveal: "click",
+      ambientAudio: null,
+    },
   };
 }
 
@@ -143,7 +148,10 @@ describe("panel reveal", () => {
   });
 
   it("frames the camera around revealed panels only", () => {
-    const pg = pageOf([panel("a", 0, 0), panel("b", 0, 50, { story: { order: 2, reveal: "click", delayMs: 0, audio: null } })]);
+    const pg = pageOf([
+      panel("a", 0, 0),
+      panel("b", 0, 50, { story: { order: 2, reveal: "click", delayMs: 0, audio: null } }),
+    ]);
     const beats = pageBeats(pg);
     const cam1 = cameraFor(beats, 1, pg, 0);
     assert.ok(cam1.h < 70);
@@ -154,7 +162,11 @@ describe("panel reveal", () => {
   it("cover-fits the first panel and overscans it", () => {
     const pg = pageOf([
       panel("a", 10, 10, { w: 80, h: 40 } as Partial<PanelItem>),
-      panel("b", 10, 55, { w: 80, h: 40, story: { order: 2, reveal: "click", delayMs: 0, audio: null } }),
+      panel("b", 10, 55, {
+        w: 80,
+        h: 40,
+        story: { order: 2, reveal: "click", delayMs: 0, audio: null },
+      }),
     ]);
     const beats = pageBeats(pg);
     const first = revealCamera(beats, 1, pg);
@@ -165,6 +177,29 @@ describe("panel reveal", () => {
     assert.equal(fit.scale, Math.min(390 / first.w, 844 / first.h));
     const cover = coverFit(all, 390, 844);
     assert.equal(cover.scale, Math.max(390 / all.w, 844 / all.h));
+  });
+
+  it("keeps the newest two panels big and pushes the read ones back", () => {
+    const strip = (id: string, y: number, order: number) =>
+      panel(id, 5, y, { w: 90, h: 20, story: { order, reveal: "click", delayMs: 0, audio: null } });
+    const pg = pageOf([strip("a", 0, 1), strip("b", 25, 2), strip("c", 50, 3), strip("d", 75, 4)]);
+    const beats = pageBeats(pg);
+
+    const two = revealCamera(beats, 2, pg);
+    assert.ok(two.y + two.h < 50, "two panels in, the third is still off-stage");
+
+    const three = revealCamera(beats, 3, pg);
+    const pair = { top: beats[1].bounds.y, bottom: beats[2].bounds.y + beats[2].bounds.h };
+    assert.ok(three.y <= pair.top && three.y + three.h >= pair.bottom, "panels 2 and 3 stay whole");
+    assert.ok(three.y > beats[0].bounds.y, "panel 1 gives up room to panel 3");
+    assert.ok(three.h < cameraFor(beats, 3, pg, 0.03).h, "tighter than showing everything read");
+
+    const four = revealCamera(beats, 4, pg);
+    assert.ok(four.y > three.y, "the stage keeps moving down to the newest pair");
+    assert.ok(
+      four.y <= beats[2].bounds.y && four.y + four.h >= beats[3].bounds.y + beats[3].bounds.h,
+      "panels 3 and 4 stay whole",
+    );
   });
 });
 
@@ -217,4 +252,3 @@ describe("panel shapes", () => {
     assert.equal(pointInPanel(left, 90, 90), false);
   });
 });
-

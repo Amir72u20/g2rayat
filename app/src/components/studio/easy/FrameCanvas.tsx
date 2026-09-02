@@ -33,6 +33,7 @@ export function FrameCanvas({
   tick,
   handles = true,
   className,
+  repaintRef,
   onScenePointerDown,
   onScenePointerMove,
   onScenePointerUp,
@@ -42,6 +43,8 @@ export function FrameCanvas({
   tick?: number;
   handles?: boolean;
   className?: string;
+  /** Filled with a repaint function, so a drag can redraw without React. */
+  repaintRef?: { current: (() => void) | null };
   onScenePointerDown?: (pt: ScenePoint, e: React.PointerEvent<HTMLCanvasElement>) => void;
   onScenePointerMove?: (pt: ScenePoint, e: React.PointerEvent<HTMLCanvasElement>) => void;
   onScenePointerUp?: (pt: ScenePoint, e: React.PointerEvent<HTMLCanvasElement>) => void;
@@ -96,6 +99,16 @@ export function FrameCanvas({
       paint();
     });
   }, [paint]);
+
+  // Hand the caller a direct repaint: dragging a bubble then costs one canvas
+  // frame instead of a store commit and a React render per pointer move.
+  useEffect(() => {
+    if (!repaintRef) return;
+    repaintRef.current = schedule;
+    return () => {
+      repaintRef.current = null;
+    };
+  }, [repaintRef, schedule]);
 
   useEffect(() => {
     page.items.forEach((it) => {

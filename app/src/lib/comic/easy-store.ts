@@ -119,6 +119,10 @@ export interface EasyState extends Persisted {
   syncClipMeta: () => boolean;
   /** Re-open blob URLs for restored shots (a reload drops the URL cache). */
   rehydrateAssets: () => Promise<void>;
+  /** Repaint-only edit: mutate a frame during a drag without a store commit. */
+  liveEdit: () => void;
+  /** Land a live edit — one commit, one session write. */
+  endLiveEdit: () => void;
 
   addBubble: (kind: BubbleKind) => void;
   selectBubble: (id: string | null) => void;
@@ -138,7 +142,20 @@ export interface EasyState extends Persisted {
   save: () => Promise<ComicProject>;
 }
 
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Session writes are coalesced: serialising every frame on each pointer move
+ *  is what used to make dragging a bubble feel sticky. */
 function persist(state: EasyState) {
+  if (typeof sessionStorage === "undefined") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    writeSession(state);
+  }, 350);
+}
+
+function writeSession(state: EasyState) {
   if (typeof sessionStorage === "undefined") return;
   const data: Persisted = {
     title: state.title,
@@ -224,6 +241,10 @@ export const useEasy = create<EasyState>((set, get) => {
       }
     },
 
+    liveEdit: () => {
+      // Nothing to do in the store: the canvas repaints itself while dragging.
+    },
+    endLiveEdit: () => commit({ shots: [...get().shots] }),
     setStep: (s) => commit({ step: s }),
     nextStep: () => {
       const order = EASY_STEPS.map((s) => s.id);
