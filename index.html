@@ -128,16 +128,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#14100a;
 const CONFIG = {
   WORLD_SIZE: 6000,
   START_MASS: 10,
-  SNAKE_BASE_SPEED: 165,      // px/s
-  SNAKE_MIN_SPEED: 62,
+  // A mouse of equal mass is FASTER than a snake: the snake cannot win a chase,
+  // it has to ambush. This is the core of the balance.
+  SNAKE_BASE_SPEED: 148,      // px/s
+  SNAKE_MIN_SPEED: 56,
   SNAKE_SPEED_EXP: 0.28,
-  MOUSE_BASE_SPEED: 150,
-  MOUSE_MIN_SPEED: 58,
+  MOUSE_BASE_SPEED: 170,
+  MOUSE_MIN_SPEED: 68,
   MOUSE_SPEED_EXP: 0.22,
-  STRIKE_MULT: 3.5,
-  STRIKE_DURATION: 0.35,
-  STRIKE_COOLDOWN: 1.2,
+  // Strike economy: one lunge covers ~0.7 s of running in 0.28 s, then 2.2 s of
+  // crawling at 40% speed. Chaining strikes therefore averages ~0.6x normal
+  // speed — deliberately SLOWER than simply slithering, so it can never be
+  // used as a way to outrun a mouse.
+  STRIKE_MULT: 2.6,
+  STRIKE_DURATION: 0.28,
+  STRIKE_COOLDOWN: 2.2,
+  STRIKE_SLOW: 0.40,          // speed multiplier during the cooldown
   STRIKE_CHARGE_TIME: 0.55,   // hold time for a full-power strike
+  STRIKE_STAMINA_COST: 0.5,   // stamina spent per lunge (bar refills slowly)
+  STRIKE_STAMINA_REGEN: 0.17, // per second — two lunges, then you must wait
   AMBUSH_CHARGE_TIME: 2.5,
   AMBUSH_ENTER_TIME: 1.0,     // must stay still this long inside a bush
   AMBUSH_BONUS: 2.0,
@@ -149,12 +158,13 @@ const CONFIG = {
   HEAL_TIME: 5,
   HEALER_SLOW: 0.75,
   BURROW_SAFE_TIME: 8,
-  BURROW_MAX_MASS: 42,        // a fat mouse simply does not fit (comedy + balance)
+  BURROW_MAX_MASS: 55,        // a fat mouse simply does not fit (comedy + balance)
   DAY_NIGHT_CYCLE: 240,
-  SEED_VALUE: 1.0,
-  SEED_VALUE_IN_BUSH: 2.0,
-  SEED_COUNT: 900,
-  SEED_RESPAWN_PER_SEC: 14,
+  SEED_VALUE: 1.5,
+  SEED_VALUE_IN_BUSH: 3.0,
+  SEED_COUNT: 1500,
+  SEED_RESPAWN_PER_SEC: 28,
+  SEED_RING: 200,             // how far seeds spread around a bush
   CORPSE_MASS_RATIO: 0.6,
   CORPSE_LIFETIME: 20,
   BOT_COUNT: 40,
@@ -362,16 +372,14 @@ const World = {
       this.bushes.push(this.makeBush(rnd(260, S - 260), rnd(260, S - 260), rnd(80, 170)));
     }
 
-    // --- Static scenery: rocks, bones, cracked dirt patches ---
-    for (let i = 0; i < 520; i++) {
-      const t = Math.random();
-      this.props.push({
-        x: rnd(60, S - 60), y: rnd(60, S - 60),
-        r: t < 0.55 ? rnd(6, 22) : (t < 0.82 ? rnd(28, 70) : rnd(10, 26)),
-        a: Math.random() * TAU,
-        kind: t < 0.55 ? 0 : (t < 0.82 ? 1 : 2)   // 0 rock, 1 cracked dirt, 2 bones
-      });
-    }
+    // --- Static scenery: rock clusters, pebbles, dry tufts, bones, dirt ---
+    for (let i = 0; i < 150; i++) this.props.push(this.makeRockCluster(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 230; i++) this.props.push(this.makePebbles(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 260; i++) this.props.push(this.makeTuft(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 90; i++)
+      this.props.push({ kind: 2, x: rnd(60, S - 60), y: rnd(60, S - 60), r: rnd(10, 26), a: Math.random() * TAU });
+    for (let i = 0; i < 120; i++)
+      this.props.push({ kind: 1, x: rnd(60, S - 60), y: rnd(60, S - 60), r: rnd(30, 80), a: Math.random() * TAU });
 
     // --- Burrows: mouse-only shelters, never inside a bush ---
     let tries = 0;
@@ -384,7 +392,7 @@ const World = {
 
     // --- Seed pool (object pooling: allocated once, recycled forever) ---
     this.seeds.length = 0;
-    for (let i = 0; i < CONFIG.SEED_COUNT; i++) this.seeds.push({ x: 0, y: 0, active: false, inBush: false, g: 0 });
+    for (let i = 0; i < CONFIG.SEED_COUNT; i++) this.seeds.push({ x: 0, y: 0, active: false, inBush: false, g: 0, type: 0 });
     for (let i = 0; i < CONFIG.SEED_COUNT; i++) this.spawnSeed();
 
     // --- Pools for transient effects (no allocation inside the game loop) ---
@@ -412,19 +420,60 @@ const World = {
     this.time = rnd(0, CONFIG.DAY_NIGHT_CYCLE * 0.35);
   },
 
+  // Two species share the desert: watered green shrubs and dry brown scrub.
+  // Each bush just references a pre-rendered sprite, so drawing one costs a
+  // single drawImage no matter how detailed it looks.
   makeBush(x, y, r) {
-    // Pre-computed leaf blobs so rendering never allocates.
-    const blobs = [];
-    const n = clamp(Math.round(r * 0.20), 6, 34);
+    return {
+      x, y, r,
+      species: Math.random() < 0.32 ? 0 : 1,          // 0 green, 1 dry
+      sizeClass: r < 140 ? 0 : (r < 230 ? 1 : 2),
+      variant: (Math.random() * 3) | 0,
+      rot: Math.random() * TAU,
+      shake: 0, ph: Math.random() * TAU
+    };
+  },
+
+  // A cluster of faceted boulders: outline and top facet baked once.
+  makeRockCluster(x, y) {
+    const n = rndInt(2, 6), rocks = [];
+    let R = 0;
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.65) * r * 0.92;
-      blobs.push({
-        dx: Math.cos(a) * d, dy: Math.sin(a) * d * 0.86,
-        r: rnd(r * 0.16, r * 0.34), a: Math.random() * TAU,
-        ph: Math.random() * TAU, tone: Math.random()
-      });
+      const a = Math.random() * TAU, d = rnd(0, 26 * n * 0.5);
+      const rr = rnd(11, 34) * (i === 0 ? 1.25 : 1);
+      const dx = Math.cos(a) * d, dy = Math.sin(a) * d * 0.72;
+      const v = rndInt(6, 9), body = [], top = [];
+      const rot = Math.random() * TAU;
+      for (let k = 0; k < v; k++) {
+        const ang = rot + k / v * TAU;
+        const rad = rr * rnd(0.78, 1.12);
+        body.push(Math.cos(ang) * rad, Math.sin(ang) * rad * 0.82);
+        top.push(Math.cos(ang) * rad * 0.56 - rr * 0.16, Math.sin(ang) * rad * 0.46 - rr * 0.2);
+      }
+      rocks.push({ dx, dy, r: rr, body, top, tone: Math.random() });
+      R = Math.max(R, d + rr);
     }
-    return { x, y, r, blobs, shake: 0, ph: Math.random() * TAU };
+    rocks.sort((a, b) => a.dy - b.dy);
+    return { kind: 0, x, y, r: R + 8, rocks };
+  },
+  makePebbles(x, y) {
+    const n = rndInt(5, 14), dots = [];
+    let R = 0;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.6) * rnd(20, 70);
+      const rr = rnd(2, 5.5);
+      dots.push({ dx: Math.cos(a) * d, dy: Math.sin(a) * d * 0.8, r: rr, a: Math.random() * TAU });
+      R = Math.max(R, d + rr);
+    }
+    return { kind: 3, x, y, r: R + 4, dots };
+  },
+  makeTuft(x, y) {
+    const n = rndInt(16, 30), blades = [], R = rnd(12, 26);
+    for (let i = 0; i < n; i++) {
+      const a = rnd(-2.6, -0.5) + (Math.random() < 0.5 ? 0 : Math.PI);
+      blades.push({ a, len: R * rnd(0.7, 1.5), curl: rnd(-0.5, 0.5), w: rnd(0.8, 1.7) });
+    }
+    return { kind: 4, x, y, r: R * 1.6, blades, tone: Math.random() };
   },
 
   bushAt(x, y) {
@@ -444,11 +493,16 @@ const World = {
       // the mouse's food is exactly where the snake is hiding.
       const b = this.bushes[(Math.random() * this.bushes.length) | 0];
       const a = Math.random() * TAU;
-      const d = Math.random() < 0.45 ? Math.random() * b.r * 0.9 : b.r + Math.random() * 150;
+      const d = Math.random() < 0.42 ? Math.random() * b.r * 0.9 : b.r + Math.random() * CONFIG.SEED_RING;
       s.x = clamp(b.x + Math.cos(a) * d, 20, this.size - 20);
       s.y = clamp(b.y + Math.sin(a) * d, 20, this.size - 20);
       s.inBush = d < b.r;
       s.g = Math.random() * TAU;
+      // Food kind: 0 grain, 1 berry, 2 pod, 3 nut. Berries and pods grow in the
+      // shade of a bush — the good stuff is always in the dangerous place.
+      s.type = b.species === 0 && d < b.r * 1.3
+        ? (Math.random() < 0.62 ? 1 : 2)                    // lush green bush: berries
+        : (s.inBush ? (Math.random() < 0.45 ? 2 : 3) : (Math.random() < 0.66 ? 0 : 3));
       s.active = true;
       return s;
     }
@@ -549,7 +603,7 @@ const tmpA = [], tmpB = [], tmpC = [];
 /* ---------------------------- 6. ENTITIES --------------------------- */
 let nextId = 1;
 
-function snakeRadius(m) { return 4.5 + Math.sqrt(m) * 1.35; }
+function snakeRadius(m) { return 3.4 + Math.sqrt(m) * 0.98; }
 function mouseRadius(m) { return 5 + Math.sqrt(m) * 1.25; }
 
 function makeSnake(x, y, mass, isPlayer) {
@@ -560,7 +614,7 @@ function makeSnake(x, y, mass, isPlayer) {
     r: snakeRadius(mass), segs: [], bulges: [],
     wave: Math.random() * TAU, tongue: Math.random() * 1.5, tongueOut: 0,
     ambush: false, stillT: 0, coil: 0,
-    strikeCharge: 0, charging: false, strikeT: 0, cooldown: 0, strikePower: 0,
+    strikeCharge: 0, charging: false, strikeT: 0, cooldown: 0, strikePower: 0, stamina: 1,
     digest: 0, immune: CONFIG.SPAWN_IMMUNITY, inBush: null, bushT: 0,
     kills: 0, maxMass: mass, born: 0, trailT: 0, hissT: rnd(2, 8),
     state: 'WANDER', stateT: 0, wx: x, wy: y, prey: null, patience: rnd(3, 10),
@@ -569,10 +623,11 @@ function makeSnake(x, y, mass, isPlayer) {
   };
   e.desired = e.angle;
   const n = snakeSegCount(mass);
-  for (let i = 0; i < n; i++) e.segs.push({ x: x - Math.cos(e.angle) * i * 6, y: y - Math.sin(e.angle) * i * 6 });
+  const sp0 = e.r * 0.82;
+  for (let i = 0; i < n; i++) e.segs.push({ x: x - Math.cos(e.angle) * i * sp0, y: y - Math.sin(e.angle) * i * sp0 });
   return e;
 }
-function snakeSegCount(m) { return clamp(Math.round(9 + m * 0.55), 9, 64); }
+function snakeSegCount(m) { return clamp(Math.round(15 + m * 0.85), 15, 76); }
 
 function makeMouse(x, y, mass, isPlayer) {
   return {
@@ -608,7 +663,7 @@ function currentSpeed(e) {
   let s = baseSpeed(e);
   if (e.kind === 'snake') {
     if (e.strikeT > 0) s *= CONFIG.STRIKE_MULT * (0.72 + 0.28 * e.strikePower) * (e.strikeAmbush ? 1.25 : 1);
-    else if (e.cooldown > 0) s *= 0.45;          // a missed strike really hurts
+    else if (e.cooldown > 0) s *= CONFIG.STRIKE_SLOW;   // a missed strike really hurts
     if (e.digest > 0) s *= CONFIG.DIGEST_SLOW;
   } else {
     if (e.venom > 0) {
@@ -671,7 +726,7 @@ function moveEntity(e, dt) {
 }
 
 function updateSnakeBody(e, dt) {
-  const segs = e.segs, spacing = e.r * 0.62;
+  const segs = e.segs, spacing = e.r * 0.82;
   segs[0].x = e.x; segs[0].y = e.y;
   for (let i = 1; i < segs.length; i++) {
     const p = segs[i - 1], s = segs[i];
@@ -682,8 +737,8 @@ function updateSnakeBody(e, dt) {
     s.x = p.x + dx * k; s.y = p.y + dy * k;
   }
   // Sinusoidal crawl wave — amplitude grows with speed, giving real slither.
-  e.wave += dt * (2.2 + (e.speedNow || 0) / 34);
-  e.waveAmp = lerp(e.waveAmp || 0, e.r * (0.20 + 0.52 * clamp((e.speedNow || 0) / baseSpeed(e), 0, 1.4)), dt * 6);
+  e.wave += dt * (2.6 + (e.speedNow || 0) / 28);
+  e.waveAmp = lerp(e.waveAmp || 0, e.r * (0.55 + 1.75 * clamp((e.speedNow || 0) / baseSpeed(e), 0, 1.3)), dt * 5);
 
   // Sand drag marks left by the body, slowly fading.
   e.trailT -= dt;
@@ -704,6 +759,8 @@ function updateSnake(e, dt) {
   e.immune = Math.max(0, e.immune - dt);
   e.digest = Math.max(0, e.digest - dt);
   e.cooldown = Math.max(0, e.cooldown - dt);
+  // Lunge stamina refills slowly, so a snake cannot hop its way across the map.
+  if (e.strikeT <= 0) e.stamina = Math.min(1, e.stamina + CONFIG.STRIKE_STAMINA_REGEN * dt);
   e.flash = Math.max(0, e.flash - dt * 2);
   if (e.strikeT > 0) {
     e.strikeT -= dt;
@@ -742,8 +799,16 @@ function updateSnake(e, dt) {
   setMass(e, e.mass);
 }
 
+function canStrike(e) {
+  return e.cooldown <= 0 && e.strikeT <= 0 && e.digest <= 0 && e.stamina >= CONFIG.STRIKE_STAMINA_COST;
+}
 function releaseStrike(e) {
-  if (e.cooldown > 0 || e.strikeT > 0 || e.digest > 0) { e.charging = false; e.strikeCharge = 0; return; }
+  if (!canStrike(e)) {
+    e.charging = false; e.strikeCharge = 0;
+    if (e.isPlayer && e.stamina < CONFIG.STRIKE_STAMINA_COST) UI.toast('نفس کم آورده‌ای — صبر کن');
+    return false;
+  }
+  e.stamina -= CONFIG.STRIKE_STAMINA_COST;
   const power = Math.max(0.25, e.strikeCharge);
   e.strikePower = power;
   e.strikeAmbush = e.coil >= 0.999 || (e.ambush && e.coil > 0.6);
@@ -755,6 +820,7 @@ function releaseStrike(e) {
   if (d < 900) Sound.whoosh(clamp(1 - d / 900, 0, 1));
   for (let i = 0; i < 8; i++) World.particle(e.x, e.y, rnd(-90, 90), rnd(-90, 90), 0.5, rnd(2, 4), 0);
   if (e.isPlayer) vibrate(18);
+  return true;
 }
 
 function updateMouse(e, dt) {
@@ -972,7 +1038,7 @@ function aiSnake(e, dt) {
       e.throttle = 0;                                   // real, patient waiting
       e.charging = e.coil > 0.4;
       const reach = 120 + e.coil * 170;
-      if (preyBest && preyD < reach * reach && e.cooldown <= 0 && e.digest <= 0) {
+      if (preyBest && preyD < reach * reach && canStrike(e)) {
         e.desired = Math.atan2(preyBest.y - e.y, preyBest.x - e.x);
         if (Math.abs(angDiff(e.angle, e.desired)) < 0.55) {
           e.strikeCharge = clamp(e.coil, 0.35, 1);
@@ -996,7 +1062,7 @@ function aiSnake(e, dt) {
       e.desired = Math.atan2(p.y - e.y, p.x - e.x);
       e.throttle = 1;
       const d2p = dist2(e.x, e.y, p.x, p.y);
-      if (d2p < 150 * 150 && e.cooldown <= 0 && e.digest <= 0) { e.strikeCharge = 0.8; releaseStrike(e); e.state = 'STRIKE'; e.stateT = 0; e.target = p; }
+      if (d2p < 150 * 150 && canStrike(e)) { e.strikeCharge = 0.8; releaseStrike(e); e.state = 'STRIKE'; e.stateT = 0; e.target = p; }
       break;
     }
     case 'PURSUE': {                                   // follow the envenomated prey
@@ -1005,7 +1071,7 @@ function aiSnake(e, dt) {
       e.desired = Math.atan2(p.y - e.y, p.x - e.x);
       e.throttle = 0.85;
       const d2p = dist2(e.x, e.y, p.x, p.y);
-      if (d2p < 170 * 170 && e.cooldown <= 0 && e.digest <= 0) { e.strikeCharge = 0.7; releaseStrike(e); e.target = p; }
+      if (d2p < 170 * 170 && canStrike(e)) { e.strikeCharge = 0.7; releaseStrike(e); e.target = p; }
       if (e.stateT > 24) { e.prey = null; e.state = 'WANDER'; e.stateT = 0; }
       break;
     }
@@ -1455,13 +1521,14 @@ const R = {
     this.canvas.style.height = this.h + 'px';
   },
 
-  // Procedural sand texture baked once into an offscreen tile.
+  // Procedural desert floor baked once into a seamless offscreen tile:
+  // sand grain, wind ripples and a cracked-earth network.
   buildSand() {
-    const s = 256, c = document.createElement('canvas');
+    const s = 512, c = document.createElement('canvas');
     c.width = s; c.height = s;
     const x = c.getContext('2d');
     const img = x.createImageData(s, s);
-    // Bilinear wrap-blend makes the value noise perfectly seamless: no tile seams.
+    // Bilinear wrap-blend makes the value noise perfectly seamless.
     const tileNoise = (i, j, f) => {
       const u = i / s, v = j / s;
       return vnoise(i / f, j / f) * (1 - u) * (1 - v) + vnoise((i - s) / f, j / f) * u * (1 - v)
@@ -1469,17 +1536,180 @@ const R = {
     };
     for (let j = 0; j < s; j++) {
       for (let i = 0; i < s; i++) {
-        const n = tileNoise(i, j, 30) * 0.55 + tileNoise(i, j, 9) * 0.32 + Math.random() * 0.13;
+        const n = tileNoise(i, j, 64) * 0.52 + tileNoise(i, j, 17) * 0.33 + Math.random() * 0.15;
         const k = (j * s + i) * 4;
-        img.data[k] = 196 + n * 44;
-        img.data[k + 1] = 168 + n * 40;
-        img.data[k + 2] = 120 + n * 36;
+        img.data[k] = 214 + n * 36;
+        img.data[k + 1] = 184 + n * 34;
+        img.data[k + 2] = 126 + n * 30;
         img.data[k + 3] = 255;
       }
     }
     x.putImageData(img, 0, 0);
+
+    // Wind ripples — sine curves whose period divides the tile, so they wrap.
+    x.lineCap = 'round';
+    for (let k = 0; k < 11; k++) {
+      const y0 = (k + 0.5) * s / 11;
+      x.strokeStyle = k % 2 ? 'rgba(228,203,152,0.34)' : 'rgba(176,146,96,0.16)';
+      x.lineWidth = k % 2 ? 2.6 : 1.5;
+      x.beginPath();
+      for (let i = 0; i <= s; i += 8) {
+        const y = y0 + Math.sin(i / s * TAU * 2 + k * 1.7) * 10 + Math.sin(i / s * TAU * 5 + k) * 3.4;
+        if (i === 0) x.moveTo(i, y); else x.lineTo(i, y);
+      }
+      x.stroke();
+    }
+
+    // Cracked earth: a jittered lattice on a torus, drawn at nine offsets so
+    // the crack network continues across every tile edge.
+    const N = 14, cell = s / N, pts = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++)
+      pts.push({ x: (i + 0.18 + Math.random() * 0.64) * cell, y: (j + 0.18 + Math.random() * 0.64) * cell });
+    const segs = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const a = pts[j * N + i];
+      const rt = pts[j * N + (i + 1) % N], dn = pts[((j + 1) % N) * N + i];
+      segs.push([a.x, a.y, rt.x + (i === N - 1 ? s : 0), rt.y]);
+      segs.push([a.x, a.y, dn.x, dn.y + (j === N - 1 ? s : 0)]);
+    }
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+      for (let q = 0; q < segs.length; q++) {
+        const g = segs[q];
+        const mx = (g[0] + g[2]) / 2 + (Math.random() - 0.5) * 7;
+        const my = (g[1] + g[3]) / 2 + (Math.random() - 0.5) * 7;
+        x.strokeStyle = 'rgba(234,212,166,0.20)';     // raised lip beside the crack
+        x.lineWidth = 1.8;
+        x.beginPath();
+        x.moveTo(g[0] + ox * s + 1.3, g[1] + oy * s + 1.3);
+        x.quadraticCurveTo(mx + ox * s + 1.3, my + oy * s + 1.3, g[2] + ox * s + 1.3, g[3] + oy * s + 1.3);
+        x.stroke();
+        x.strokeStyle = 'rgba(126,100,60,0.20)';      // the crack itself
+        x.lineWidth = 1.1;
+        x.beginPath();
+        x.moveTo(g[0] + ox * s, g[1] + oy * s);
+        x.quadraticCurveTo(mx + ox * s, my + oy * s, g[2] + ox * s, g[3] + oy * s);
+        x.stroke();
+      }
+    }
     this.sandTile = c;
     this.sandPat = this.ctx.createPattern(c, 'repeat');
+  },
+
+  // ---- Bush sprites: every bush is one drawImage of a pre-rendered plant ----
+  buildBushSprites() {
+    const px = [256, 384, 512];
+    this.bushSprites = [[], []];
+    for (let sc = 0; sc < 3; sc++) {
+      const green = [], dry = [];
+      for (let v = 0; v < 3; v++) { green.push(this.paintGreenBush(px[sc])); dry.push(this.paintDryBush(px[sc])); }
+      this.bushSprites[0].push(green);
+      this.bushSprites[1].push(dry);
+    }
+  },
+
+  // An irregular crown outline — a plant is never a perfect disc.
+  crownShape() {
+    const p1 = Math.random() * TAU, p2 = Math.random() * TAU, p3 = Math.random() * TAU;
+    return a => 1 + 0.17 * Math.sin(3 * a + p1) + 0.11 * Math.sin(5 * a + p2) + 0.07 * Math.sin(8 * a + p3);
+  },
+
+  // Watered green shrub: clumps of small leaves over a dark under-mass.
+  paintGreenBush(size) {
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const x = c.getContext('2d');
+    const C = size / 2, R = size * 0.455, edge = this.crownShape();
+    const leaf = (px2, py, lr, r0, g0, b0, alpha) => {
+      x.fillStyle = 'rgba(' + r0 + ',' + g0 + ',' + b0 + ',' + alpha + ')';
+      x.beginPath();
+      x.ellipse(px2, py, lr, lr * rnd(0.58, 0.82), Math.random() * TAU, 0, TAU);
+      x.fill();
+    };
+    // 1) Solid dark silhouette so the crown reads as one body from a distance.
+    for (let i = 0; i < Math.round(size * 0.55); i++) {
+      const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.5) * R * edge(a);
+      leaf(C + Math.cos(a) * d, C + Math.sin(a) * d * 0.95, size * rnd(0.035, 0.062), 40, 52, 26, 0.95);
+    }
+    // 2) Leaf clumps — the structure the eye actually reads as foliage.
+    const clumps = Math.round(size * 0.13);
+    for (let k = 0; k < clumps; k++) {
+      const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.55) * R * edge(a) * 0.94;
+      const cx = C + Math.cos(a) * d, cy = C + Math.sin(a) * d * 0.95;
+      const light = clamp(1.15 - (cx + cy) / (size * 1.25), 0, 1);   // sun from top-left
+      const cr = size * rnd(0.045, 0.085);
+      const n = rndInt(14, 24);
+      for (let i = 0; i < n; i++) {
+        const aa = Math.random() * TAU, dd = Math.pow(Math.random(), 0.6) * cr;
+        const t = Math.random() * 0.5 + light * 0.5;
+        leaf(cx + Math.cos(aa) * dd, cy + Math.sin(aa) * dd * 0.9,
+             size * rnd(0.013, 0.024), (60 + t * 66) | 0, (84 + t * 66) | 0, (34 + t * 30) | 0, 0.92);
+      }
+    }
+    // 3) Sunlit tips catching the light on the upper-left shoulder.
+    for (let i = 0; i < Math.round(size * 0.34); i++) {
+      const a = rnd(Math.PI * 0.72, Math.PI * 1.85), d = R * edge(a) * rnd(0.45, 0.98);
+      leaf(C + Math.cos(a) * d, C + Math.sin(a) * d * 0.95, size * rnd(0.009, 0.017), 172, 190, 110, 0.78);
+    }
+    // 4) Woody twigs showing through the gaps.
+    x.strokeStyle = 'rgba(70,58,32,0.45)'; x.lineWidth = Math.max(1, size * 0.005); x.lineCap = 'round';
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * TAU, d = R * edge(a) * rnd(0.6, 0.95);
+      x.beginPath(); x.moveTo(C, C);
+      x.quadraticCurveTo(C + Math.cos(a) * d * 0.5, C + Math.sin(a) * d * 0.45,
+                         C + Math.cos(a) * d, C + Math.sin(a) * d * 0.95);
+      x.stroke();
+    }
+    return c;
+  },
+
+  // Dry desert scrub: a dense clump of short forking twigs. The stems start
+  // from scattered points, never all from the centre, or it reads as a starburst.
+  paintDryBush(size) {
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const x = c.getContext('2d');
+    const C = size / 2, R = size * 0.455, edge = this.crownShape();
+    x.lineCap = 'round';
+    const branch = (x0, y0, a, len, w, depth, col) => {
+      const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len * 0.94;
+      x.strokeStyle = col; x.lineWidth = w;
+      x.beginPath(); x.moveTo(x0, y0);
+      x.quadraticCurveTo(x0 + Math.cos(a - 0.22) * len * 0.55, y0 + Math.sin(a - 0.22) * len * 0.5, x1, y1);
+      x.stroke();
+      if (depth > 0) {
+        const forks = rndInt(2, 3);
+        for (let i = 0; i < forks; i++)
+          branch(lerp(x0, x1, rnd(0.4, 0.85)), lerp(y0, y1, rnd(0.4, 0.85)),
+                 a + rnd(-0.9, 0.9), len * rnd(0.42, 0.6), Math.max(size * 0.0022, w * 0.62), depth - 1, col);
+      }
+    };
+    const stem = (col, w, reach, depth) => {
+      const sa = Math.random() * TAU, sd = Math.pow(Math.random(), 0.7) * R * 0.45;
+      const x0 = C + Math.cos(sa) * sd, y0 = C + Math.sin(sa) * sd * 0.94;
+      const a = sa + rnd(-0.7, 0.7);
+      branch(x0, y0, a, R * edge(a) * reach, w, depth, col);
+    };
+    for (let i = 0; i < Math.round(size * 0.075); i++) stem('rgba(74,60,38,0.85)', size * 0.0085, rnd(0.28, 0.5), 3);
+    for (let i = 0; i < Math.round(size * 0.10); i++) stem('rgba(132,112,76,0.8)', size * 0.005, rnd(0.22, 0.42), 3);
+    for (let i = 0; i < Math.round(size * 0.09); i++) stem('rgba(172,152,108,0.7)', size * 0.0032, rnd(0.16, 0.34), 2);
+    // Dead leaves and husks, densest around the outer half of the crown.
+    for (let i = 0; i < Math.round(size * 2.2); i++) {
+      const a = Math.random() * TAU, d = (0.25 + Math.pow(Math.random(), 0.8) * 0.75) * R * edge(a);
+      const t = Math.random();
+      x.fillStyle = t < 0.48 ? 'rgba(128,110,72,0.82)' : (t < 0.8 ? 'rgba(164,144,100,0.78)' : 'rgba(106,110,64,0.78)');
+      const lr = size * rnd(0.006, 0.015);
+      x.beginPath();
+      x.ellipse(C + Math.cos(a) * d, C + Math.sin(a) * d * 0.94, lr, lr * 0.58, a, 0, TAU);
+      x.fill();
+    }
+    // Dense shadowed heart — this is what a snake actually hides inside.
+    for (let i = 0; i < Math.round(size * 0.55); i++) {
+      const a = Math.random() * TAU, d = Math.pow(Math.random(), 1.5) * R * 0.62;
+      x.fillStyle = 'rgba(68,58,36,0.42)';
+      const lr = size * rnd(0.016, 0.036);
+      x.beginPath(); x.ellipse(C + Math.cos(a) * d, C + Math.sin(a) * d * 0.94, lr, lr * 0.66, a, 0, TAU); x.fill();
+    }
+    return c;
   },
 
   buildMinimap() {
@@ -1489,8 +1719,8 @@ const R = {
     x.fillStyle = 'rgba(60,48,28,0.95)';
     x.fillRect(0, 0, s, s);
     const k = s / World.size;
-    x.fillStyle = 'rgba(52,78,40,0.95)';
     for (const b of World.bushes) {
+      x.fillStyle = b.species === 0 ? 'rgba(64,104,46,0.95)' : 'rgba(104,92,58,0.95)';
       x.beginPath(); x.arc(b.x * k, b.y * k, Math.max(1.2, b.r * k), 0, TAU); x.fill();
     }
     this.miniBase = c;
@@ -1498,6 +1728,7 @@ const R = {
 
   frame(alpha) {
     const ctx = this.ctx;
+    if (!this.bushSprites) this.buildBushSprites();
     const day = World.dayFactor();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#1a140c';
@@ -1556,37 +1787,96 @@ const R = {
     const P = World.props;
     for (let i = 0; i < P.length; i++) {
       const p = P[i];
-      if (!this.inView(p.x, p.y, p.r + 10)) continue;
-      if (p.kind === 0) {                    // rock
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.beginPath(); ctx.ellipse(p.x + p.r * 0.3, p.y + p.r * 0.35, p.r, p.r * 0.7, p.a, 0, TAU); ctx.fill();
-        ctx.fillStyle = '#8e8069';
-        ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.78, p.a, 0, TAU); ctx.fill();
-        ctx.fillStyle = 'rgba(255,240,210,0.22)';
-        ctx.beginPath(); ctx.ellipse(p.x - p.r * 0.25, p.y - p.r * 0.28, p.r * 0.5, p.r * 0.34, p.a, 0, TAU); ctx.fill();
-      } else if (p.kind === 1) {             // cracked dirt patch
-        ctx.fillStyle = 'rgba(120,96,62,0.30)';
-        ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.72, p.a, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(70,52,30,0.35)'; ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        for (let k = 0; k < 3; k++) {
-          const a = p.a + k * 2.1;
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + Math.cos(a) * p.r * 0.9, p.y + Math.sin(a) * p.r * 0.65);
+      if (!this.inView(p.x, p.y, p.r + 12)) continue;
+      switch (p.kind) {
+        case 0: {                                  // faceted boulder cluster
+          for (let k = 0; k < p.rocks.length; k++) {
+            const o = p.rocks[k], ox = p.x + o.dx, oy = p.y + o.dy, b = o.body, t = o.top;
+            ctx.fillStyle = 'rgba(58,40,20,0.26)';
+            ctx.beginPath(); ctx.ellipse(ox + o.r * 0.26, oy + o.r * 0.4, o.r * 1.05, o.r * 0.6, 0, 0, TAU); ctx.fill();
+            ctx.fillStyle = 'rgb(' + ((150 + o.tone * 26) | 0) + ',' + ((120 + o.tone * 24) | 0) + ',' + ((88 + o.tone * 22) | 0) + ')';
+            ctx.beginPath();
+            ctx.moveTo(ox + b[0], oy + b[1]);
+            for (let v = 2; v < b.length; v += 2) ctx.lineTo(ox + b[v], oy + b[v + 1]);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(84,60,36,0.6)'; ctx.lineWidth = 1.3; ctx.stroke();
+            ctx.fillStyle = 'rgba(232,206,164,0.45)';          // sunlit top facet
+            ctx.beginPath();
+            ctx.moveTo(ox + t[0], oy + t[1]);
+            for (let v = 2; v < t.length; v += 2) ctx.lineTo(ox + t[v], oy + t[v + 1]);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(96,70,44,0.35)'; ctx.lineWidth = 1;   // cracks
+            ctx.beginPath();
+            ctx.moveTo(ox + b[0] * 0.4, oy + b[1] * 0.4);
+            ctx.lineTo(ox + b[4], oy + b[5]);
+            ctx.stroke();
+          }
+          break;
         }
-        ctx.stroke();
-      } else {                               // dry bones
-        ctx.strokeStyle = 'rgba(232,222,196,0.8)'; ctx.lineCap = 'round';
-        ctx.lineWidth = Math.max(2, p.r * 0.22);
-        ctx.beginPath();
-        ctx.moveTo(p.x - Math.cos(p.a) * p.r, p.y - Math.sin(p.a) * p.r);
-        ctx.lineTo(p.x + Math.cos(p.a) * p.r, p.y + Math.sin(p.a) * p.r);
-        ctx.stroke();
-        ctx.lineWidth = Math.max(1.4, p.r * 0.16);
-        ctx.beginPath();
-        ctx.moveTo(p.x - Math.cos(p.a + 1) * p.r * 0.6, p.y - Math.sin(p.a + 1) * p.r * 0.6);
-        ctx.lineTo(p.x + Math.cos(p.a + 1) * p.r * 0.5, p.y + Math.sin(p.a + 1) * p.r * 0.5);
-        ctx.stroke();
+        case 1: {                                  // cracked dirt patch
+          ctx.fillStyle = 'rgba(142,112,70,0.22)';
+          ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.72, p.a, 0, TAU); ctx.fill();
+          ctx.strokeStyle = 'rgba(96,72,42,0.28)'; ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          for (let k = 0; k < 4; k++) {
+            const a = p.a + k * 1.57 + 0.3;
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x + Math.cos(a) * p.r * 0.92, p.y + Math.sin(a) * p.r * 0.66);
+          }
+          ctx.stroke();
+          break;
+        }
+        case 2: {                                  // sun-bleached bones
+          ctx.strokeStyle = 'rgba(42,30,16,0.22)'; ctx.lineCap = 'round';
+          ctx.lineWidth = Math.max(2.4, p.r * 0.26);
+          ctx.beginPath();
+          ctx.moveTo(p.x - Math.cos(p.a) * p.r + 2, p.y - Math.sin(p.a) * p.r + 3);
+          ctx.lineTo(p.x + Math.cos(p.a) * p.r + 2, p.y + Math.sin(p.a) * p.r + 3);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(238,228,204,0.92)';
+          ctx.lineWidth = Math.max(2, p.r * 0.22);
+          ctx.beginPath();
+          ctx.moveTo(p.x - Math.cos(p.a) * p.r, p.y - Math.sin(p.a) * p.r);
+          ctx.lineTo(p.x + Math.cos(p.a) * p.r, p.y + Math.sin(p.a) * p.r);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(244,236,214,0.95)';
+          for (let k = -1; k <= 1; k += 2) {
+            ctx.beginPath();
+            ctx.arc(p.x + Math.cos(p.a) * p.r * k, p.y + Math.sin(p.a) * p.r * k, p.r * 0.2, 0, TAU);
+            ctx.fill();
+          }
+          ctx.lineWidth = Math.max(1.4, p.r * 0.14);
+          ctx.strokeStyle = 'rgba(232,222,196,0.8)';
+          ctx.beginPath();
+          ctx.moveTo(p.x - Math.cos(p.a + 1) * p.r * 0.6, p.y - Math.sin(p.a + 1) * p.r * 0.6);
+          ctx.lineTo(p.x + Math.cos(p.a + 1) * p.r * 0.5, p.y + Math.sin(p.a + 1) * p.r * 0.5);
+          ctx.stroke();
+          break;
+        }
+        case 3: {                                  // scattered pebbles
+          for (let k = 0; k < p.dots.length; k++) {
+            const d = p.dots[k];
+            ctx.fillStyle = 'rgba(58,40,20,0.2)';
+            ctx.beginPath(); ctx.ellipse(p.x + d.dx + 1, p.y + d.dy + 1.4, d.r, d.r * 0.72, d.a, 0, TAU); ctx.fill();
+            ctx.fillStyle = k % 3 === 0 ? '#b49274' : '#c2a583';
+            ctx.beginPath(); ctx.ellipse(p.x + d.dx, p.y + d.dy, d.r, d.r * 0.72, d.a, 0, TAU); ctx.fill();
+          }
+          break;
+        }
+        default: {                                 // dry grass tuft
+          ctx.lineCap = 'round';
+          for (let k = 0; k < p.blades.length; k++) {
+            const b = p.blades[k];
+            ctx.strokeStyle = p.tone < 0.5 ? 'rgba(150,132,88,0.85)' : 'rgba(120,110,64,0.85)';
+            ctx.lineWidth = b.w;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.quadraticCurveTo(
+              p.x + Math.cos(b.a) * b.len * 0.6, p.y + Math.sin(b.a) * b.len * 0.6,
+              p.x + Math.cos(b.a + b.curl) * b.len, p.y + Math.sin(b.a + b.curl) * b.len);
+            ctx.stroke();
+          }
+        }
       }
     }
   },
@@ -1622,16 +1912,52 @@ const R = {
     }
   },
 
+  // Food looks different depending on who is looking at it. To a snake it is
+  // just grain and dry pips on the sand; to a mouse the same objects are ripe,
+  // colourful and obviously worth the risk.
   drawSeeds(ctx) {
     const S = World.seeds;
+    const hungry = Game.player && Game.player.kind === 'mouse';   // mouse vision
+    const t = World.time;
     for (let i = 0; i < S.length; i++) {
       const s = S[i];
-      if (!s.active || !this.inView(s.x, s.y, 10)) continue;
-      const r = s.inBush ? 4.2 : 3.1;
-      ctx.fillStyle = s.inBush ? '#f0d88a' : '#cbb075';
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, r, r * 0.72, s.g, 0, TAU); ctx.fill();
-      ctx.fillStyle = 'rgba(90,64,28,0.55)';
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, r * 0.42, r * 0.22, s.g, 0, TAU); ctx.fill();
+      if (!s.active || !this.inView(s.x, s.y, 14)) continue;
+      if (!hungry) {                                  // --- snake's eyes: dull pips
+        const r = s.inBush ? 3.4 : 2.8;
+        ctx.fillStyle = s.inBush ? '#c3a874' : '#b39c6f';
+        ctx.beginPath(); ctx.ellipse(s.x, s.y, r, r * 0.7, s.g, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(92,70,36,0.45)';
+        ctx.beginPath(); ctx.ellipse(s.x, s.y, r * 0.4, r * 0.2, s.g, 0, TAU); ctx.fill();
+        continue;
+      }
+      const c = FOOD[s.type];
+      const pulse = 0.88 + 0.12 * Math.sin(t * 2.6 + s.g * 3);
+      const r = c.r * pulse * (s.inBush ? 1.12 : 1);
+      ctx.fillStyle = c.glow;                         // appetising halo
+      ctx.beginPath(); ctx.arc(s.x, s.y, r * 2.3, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(40,26,10,0.22)';          // contact shadow
+      ctx.beginPath(); ctx.ellipse(s.x + 1, s.y + 1.6, r, r * 0.8, s.g, 0, TAU); ctx.fill();
+      if (s.type === 0) {                             // grain: a small golden ear
+        ctx.fillStyle = c.main;
+        ctx.beginPath(); ctx.ellipse(s.x, s.y, r * 1.25, r * 0.6, s.g, 0, TAU); ctx.fill();
+        ctx.strokeStyle = c.dark; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(s.x - Math.cos(s.g) * r, s.y - Math.sin(s.g) * r);
+        ctx.lineTo(s.x + Math.cos(s.g) * r, s.y + Math.sin(s.g) * r); ctx.stroke();
+      } else if (s.type === 2) {                      // pod: three little beads
+        ctx.fillStyle = c.main;
+        for (let k = -1; k <= 1; k++) {
+          ctx.beginPath();
+          ctx.arc(s.x + Math.cos(s.g) * k * r * 0.85, s.y + Math.sin(s.g) * k * r * 0.85, r * 0.58, 0, TAU);
+          ctx.fill();
+        }
+      } else {                                        // berry / nut: round fruit
+        ctx.fillStyle = c.main;
+        ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill();
+        ctx.fillStyle = c.dark;
+        ctx.beginPath(); ctx.arc(s.x + r * 0.18, s.y + r * 0.22, r * 0.72, 0, TAU); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';       // wet highlight
+      ctx.beginPath(); ctx.arc(s.x - r * 0.34, s.y - r * 0.38, r * 0.24, 0, TAU); ctx.fill();
     }
   },
 
@@ -1711,40 +2037,35 @@ const R = {
   },
 
   drawBushes(ctx, day) {
-    // Bushes are drawn ON TOP of creatures: whatever is inside is genuinely hidden.
+    // Bushes are drawn ON TOP of creatures: whatever is inside is genuinely
+    // hidden. Each one is a single pre-rendered sprite, swaying in the wind.
     const B = World.bushes, t = World.time;
     for (let i = 0; i < B.length; i++) {
       const b = B[i];
-      if (!this.inView(b.x, b.y, b.r + 30)) continue;
-      const shake = b.shake;
-      ctx.fillStyle = 'rgba(24,18,10,0.22)';
-      ctx.beginPath(); ctx.ellipse(b.x + 8, b.y + 10, b.r * 0.92, b.r * 0.72, 0, 0, TAU); ctx.fill();
-      for (let k = 0; k < b.blobs.length; k++) {
-        const o = b.blobs[k];
-        // Perlin-ish wind sway, so a real rustle is hard to tell from the breeze.
-        const w = (vnoise((b.x + o.dx) * 0.004 + t * 0.35, (b.y + o.dy) * 0.004) - 0.5) * 8;
-        const sh = shake > 0 ? Math.sin(t * 30 + o.ph) * shake * 7 : 0;
-        // Dry khaki-olive foliage, some blobs almost dead brown.
-        const li = 0.5 + 0.5 * day;
-        const rr = 94 + o.tone * 74, gg = 98 + o.tone * 30, bb = 46 + o.tone * 26;
-        ctx.fillStyle = 'rgba(' + ((rr * li) | 0) + ',' + ((gg * li) | 0) + ',' + ((bb * li) | 0) + ',0.88)';
-        ctx.beginPath();
-        ctx.ellipse(b.x + o.dx + w + sh, b.y + o.dy + w * 0.6, o.r, o.r * 0.62, o.a + w * 0.02, 0, TAU);
-        ctx.fill();
+      if (!this.inView(b.x, b.y, b.r + 40)) continue;
+      const size = b.r * 2.16;
+      ctx.fillStyle = 'rgba(44,32,14,0.15)';
+      ctx.beginPath(); ctx.ellipse(b.x + b.r * 0.12, b.y + b.r * 0.16, b.r * 0.78, b.r * 0.5, 0, 0, TAU); ctx.fill();
+      // Calm wind sway (so a real rustle is hard to tell from the breeze) plus
+      // the violent shake of something moving fast through the leaves.
+      const wind = Math.sin(t * 0.7 + b.ph) * 0.016 + Math.sin(t * 1.9 + b.ph * 2) * 0.008;
+      const shake = b.shake > 0 ? Math.sin(t * 26 + b.ph) * b.shake * 0.06 : 0;
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot + wind + shake);
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(this.bushSprites[b.species][b.sizeClass][b.variant], -size / 2, -size / 2, size, size);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      if (b.shake > 0.25 && Math.random() < b.shake * 0.4) {      // leaves flying off
+        World.particle(b.x + rnd(-b.r * 0.7, b.r * 0.7), b.y + rnd(-b.r * 0.7, b.r * 0.7),
+          rnd(-30, 30), rnd(-40, -6), 0.9, rnd(1.5, 3), 1);
       }
-      // Dry twigs for texture.
-      ctx.strokeStyle = 'rgba(60,48,24,0.5)'; ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      for (let k = 0; k < b.blobs.length; k += 3) {
-        const o = b.blobs[k];
-        ctx.moveTo(b.x, b.y);
-        ctx.lineTo(b.x + o.dx * 1.06, b.y + o.dy * 1.06);
-      }
-      ctx.stroke();
     }
   },
 
-  // Redraw the player on top of the leaves they are hiding in.
+  // Redraw the player on top of the leaves they are hiding in, so you can
+  // still read your own body while being invisible to everyone else.
   drawPlayerOverBush(ctx, day) {
     const p = Game.player;
     if (!p || !p.alive || !p.inBush || p.burrow) return;
@@ -1791,7 +2112,9 @@ const R = {
       let tx = next.x - prev.x, ty = next.y - prev.y;
       const d = Math.hypot(tx, ty) || 1;
       const nx = -ty / d, ny = tx / d;
-      const k = Math.sin(e.wave - i * 0.42) * amp * (i / n) * (1 - i / (n * 2.4));
+      // Undulation is anchored at the head and strongest through the middle.
+      const t = i / (n - 1);
+      const k = Math.sin(e.wave - i * 0.40) * amp * Math.sin(Math.PI * Math.pow(t, 1.15));
       pts[i * 2] = s.x + nx * k;
       pts[i * 2 + 1] = s.y + ny * k;
     }
@@ -1821,8 +2144,9 @@ const R = {
         const dd = Math.abs(i - bi);
         if (dd < 3) swell = Math.max(swell, b.size * 0.8 * (1 - dd / 3) * Math.sin(Math.PI * clamp(b.t * 1.05, 0, 1)));
       }
-      rad[i] = (t < 0.10 ? e.r * (0.86 + (t / 0.10) * 0.14)
-                         : e.r * (1 - Math.pow((t - 0.10) / 0.90, 1.6) * 0.84)) + swell;
+      rad[i] = (t < 0.08 ? e.r * (0.80 + (t / 0.08) * 0.20)          // slim neck
+                : t < 0.58 ? e.r                                       // full girth
+                : e.r * (1 - Math.pow((t - 0.58) / 0.42, 1.45) * 0.88)) + swell;  // tapered tail
     }
     const outline = (scale, dx, dy) => {
       ctx.beginPath();
@@ -1843,56 +2167,75 @@ const R = {
     outline(1, 5, 7); ctx.fill();
 
     ctx.fillStyle = e.isPlayer
-      ? 'rgb(' + ((152 * lit) | 0) + ',' + ((128 * lit) | 0) + ',' + ((60 * lit) | 0) + ')'
-      : 'rgb(' + ((126 * lit) | 0) + ',' + ((106 * lit) | 0) + ',' + ((56 * lit) | 0) + ')';
+      ? 'rgb(' + ((166 * lit) | 0) + ',' + ((134 * lit) | 0) + ',' + ((82 * lit) | 0) + ')'
+      : 'rgb(' + ((138 * lit) | 0) + ',' + ((110 * lit) | 0) + ',' + ((68 * lit) | 0) + ')';
     outline(1, 0, 0); ctx.fill();
     ctx.strokeStyle = 'rgba(48,36,16,' + (0.55 * lit).toFixed(3) + ')';
     ctx.lineWidth = 1.4; ctx.stroke();
 
-    ctx.fillStyle = 'rgba(228,208,160,' + (0.42 * lit).toFixed(3) + ')';   // pale belly
-    outline(0.40, 0, 0); ctx.fill();
+    ctx.fillStyle = 'rgba(238,220,178,' + (0.26 * lit).toFixed(3) + ')';   // rounded top light
+    outline(0.52, -1.6, -2.2); ctx.fill();
 
-    // Diamond skin pattern (LOD: coarser for thin bodies and distant snakes).
-    const step = e.r > 6 ? 2 : 3;
-    ctx.fillStyle = 'rgba(58,45,20,' + (0.62 * lit).toFixed(3) + ')';
-    for (let i = 1; i < n - 1; i += step) {
+    // Dark saddle blotches running ACROSS the back with a thin pale edge, and
+    // small flank spots between them — the markings of a desert sand viper.
+    const pale = 'rgba(236,216,164,' + (0.30 * lit).toFixed(3) + ')';
+    const dark = 'rgba(96,66,28,' + (0.78 * lit).toFixed(3) + ')';
+    for (let i = 2; i < n - 1; i += 5) {
       const x = pts[i * 2], y = pts[i * 2 + 1];
-      const a = Math.atan2(nrm[i * 2 + 1], nrm[i * 2]) + Math.PI / 2;
-      const w = rad[i] * (0.70 - 0.28 * Math.abs(Math.sin(i * 0.8)));
-      ctx.beginPath(); ctx.ellipse(x, y, w, rad[i] * 0.44, a, 0, TAU); ctx.fill();
+      const a = Math.atan2(nrm[i * 2 + 1], nrm[i * 2]) + Math.PI / 2;   // body direction
+      const wob = 0.82 + 0.3 * Math.sin(i * 1.7);                       // irregular saddles
+      ctx.fillStyle = pale;                                            // pale edge of the blotch
+      ctx.beginPath(); ctx.ellipse(x, y, rad[i] * 0.66 * wob, rad[i] * 0.86, a, 0, TAU); ctx.fill();
+      ctx.fillStyle = dark;                                            // the blotch itself
+      ctx.beginPath(); ctx.ellipse(x, y, rad[i] * 0.5 * wob, rad[i] * 0.7, a, 0, TAU); ctx.fill();
+    }
+    if (e.r > 6.5) {                                 // flank spots between saddles
+      ctx.fillStyle = 'rgba(96,70,34,' + (0.34 * lit).toFixed(3) + ')';
+      for (let i = 4; i < n - 1; i += 4) {
+        const x = pts[i * 2], y = pts[i * 2 + 1], nx = nrm[i * 2], ny = nrm[i * 2 + 1];
+        const o = rad[i] * 0.64, sz = rad[i] * 0.2;
+        ctx.beginPath(); ctx.ellipse(x + nx * o, y + ny * o, sz, sz * 0.85, 0, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x - nx * o, y - ny * o, sz, sz * 0.85, 0, 0, TAU); ctx.fill();
+      }
     }
 
     // --- Head ---
     const hx = pts[0], hy = pts[1], a = e.angle;
     const cos = Math.cos(a), sin = Math.sin(a);
-    const hr = e.r * 1.22;
+    const hr = e.r * 1.26;
     ctx.save();
     ctx.translate(hx, hy); ctx.rotate(a);
     ctx.fillStyle = 'rgba(20,14,6,0.28)';
     ctx.beginPath(); ctx.ellipse(4, 6, hr * 1.25, hr * 0.9, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = e.isPlayer ? 'rgb(' + ((162 * lit) | 0) + ',' + ((136 * lit) | 0) + ',' + ((64 * lit) | 0) + ')'
-                               : 'rgb(' + ((134 * lit) | 0) + ',' + ((112 * lit) | 0) + ',' + ((58 * lit) | 0) + ')';
-    ctx.beginPath();                                  // triangular viper head
-    ctx.moveTo(hr * 1.5, 0);
-    ctx.quadraticCurveTo(hr * 0.5, -hr * 1.05, -hr * 0.9, -hr * 0.72);
-    ctx.lineTo(-hr * 0.9, hr * 0.72);
-    ctx.quadraticCurveTo(hr * 0.5, hr * 1.05, hr * 1.5, 0);
+    ctx.fillStyle = e.isPlayer ? 'rgb(' + ((170 * lit) | 0) + ',' + ((138 * lit) | 0) + ',' + ((86 * lit) | 0) + ')'
+                               : 'rgb(' + ((142 * lit) | 0) + ',' + ((114 * lit) | 0) + ',' + ((72 * lit) | 0) + ')';
+    ctx.beginPath();                                  // wedge-shaped viper head
+    ctx.moveTo(hr * 1.75, 0);                         // snout
+    ctx.quadraticCurveTo(hr * 0.85, -hr * 0.62, hr * 0.10, -hr * 0.95);   // wide jaw
+    ctx.quadraticCurveTo(-hr * 0.70, -hr * 0.86, -hr * 1.05, -hr * 0.42); // narrowing neck
+    ctx.lineTo(-hr * 1.05, hr * 0.42);
+    ctx.quadraticCurveTo(-hr * 0.70, hr * 0.86, hr * 0.10, hr * 0.95);
+    ctx.quadraticCurveTo(hr * 0.85, hr * 0.62, hr * 1.75, 0);
     ctx.fill();
+    ctx.strokeStyle = 'rgba(58,42,18,' + (0.5 * lit).toFixed(3) + ')';
+    ctx.lineWidth = Math.max(1, hr * 0.11); ctx.stroke();               // crisp jaw line
+    ctx.fillStyle = 'rgba(78,56,24,' + (0.3 * lit).toFixed(3) + ')';    // dark crown patch
+    ctx.beginPath(); ctx.ellipse(-hr * 0.25, 0, hr * 0.6, hr * 0.42, 0, 0, TAU); ctx.fill();
     // Vertical-slit eyes.
     ctx.fillStyle = '#f2d46a';
-    ctx.beginPath(); ctx.ellipse(hr * 0.25, -hr * 0.6, hr * 0.30, hr * 0.26, 0, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hr * 0.25, hr * 0.6, hr * 0.30, hr * 0.26, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.5, -hr * 0.6, hr * 0.24, hr * 0.21, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.5, hr * 0.6, hr * 0.24, hr * 0.21, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = '#160f05';
-    ctx.beginPath(); ctx.ellipse(hr * 0.28, -hr * 0.6, hr * 0.09, hr * 0.22, 0, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(hr * 0.28, hr * 0.6, hr * 0.09, hr * 0.22, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.53, -hr * 0.6, hr * 0.07, hr * 0.17, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.53, hr * 0.6, hr * 0.07, hr * 0.17, 0, 0, TAU); ctx.fill();
     // Forked tongue.
     if (e.tongueOut > 0) {
-      const t = e.tongueOut / 0.45, L = hr * (1.4 + t * 1.5);
-      ctx.strokeStyle = '#d0384e'; ctx.lineWidth = Math.max(1.2, hr * 0.13); ctx.lineCap = 'round';
+      const t = e.tongueOut / 0.45, L = hr * (0.55 + t * 0.75);
+      ctx.strokeStyle = '#c8384c'; ctx.lineWidth = Math.max(1, hr * 0.10); ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(hr * 1.4, 0); ctx.lineTo(hr * 1.4 + L * 0.6, 0);
-      ctx.moveTo(hr * 1.4 + L * 0.6, 0); ctx.lineTo(hr * 1.4 + L, -L * 0.35);
-      ctx.moveTo(hr * 1.4 + L * 0.6, 0); ctx.lineTo(hr * 1.4 + L, L * 0.35);
+      ctx.moveTo(hr * 1.7, 0); ctx.lineTo(hr * 1.7 + L * 0.6, 0);
+      ctx.moveTo(hr * 1.7 + L * 0.6, 0); ctx.lineTo(hr * 1.7 + L, -L * 0.42);
+      ctx.moveTo(hr * 1.7 + L * 0.6, 0); ctx.lineTo(hr * 1.7 + L, L * 0.42);
       ctx.stroke();
     }
     ctx.restore();
@@ -2048,6 +2391,13 @@ const R = {
     }
   }
 };
+// Food palette as a hungry mouse sees it.
+const FOOD = [
+  { r: 3.6, main: '#f0c24e', dark: '#b8862a', glow: 'rgba(240,194,78,0.16)' },   // grain
+  { r: 4.0, main: '#e0484e', dark: '#a82b38', glow: 'rgba(224,72,78,0.18)' },    // berry
+  { r: 3.4, main: '#8e6fd8', dark: '#5c44a0', glow: 'rgba(142,111,216,0.18)' },  // pod
+  { r: 4.2, main: '#e08a3c', dark: '#a85c22', glow: 'rgba(224,138,60,0.16)' }    // nut
+];
 const SNAKE_PTS = new Float32Array(160);
 const SNAKE_NRM = new Float32Array(160);
 const SNAKE_RAD = new Float32Array(80);
@@ -2124,8 +2474,11 @@ R.drawHUD = function (ctx) {
     this.bar(ctx, bx, by + 36, bw, bh, p.coil, p.coil >= 1 ? '#ffd05a' : '#6fc3e8');
     ctx.fillStyle = p.coil >= 1 ? '#ffd05a' : '#f0e2c4';
     ctx.fillText(p.ambush ? (p.coil >= 1 ? 'کمین — آماده!' : 'کمین…') : 'تنش', bx + bw + 8, by + 36 + bh / 2);
-    if (p.digest > 0) { ctx.fillStyle = '#e8a05a'; ctx.fillText('در حال هضم…', bx, by + 58); }
-    else if (p.cooldown > 0) { ctx.fillStyle = '#d08080'; ctx.fillText('ضربه خطا رفت!', bx, by + 58); }
+    this.bar(ctx, bx, by + 54, bw, bh, p.stamina, p.stamina >= CONFIG.STRIKE_STAMINA_COST ? '#b48ae8' : '#6b5a8a');
+    ctx.fillStyle = '#d8c8f0';
+    ctx.fillText('نفس', bx + bw + 8, by + 54 + bh / 2);
+    if (p.digest > 0) { ctx.fillStyle = '#e8a05a'; ctx.fillText('در حال هضم…', bx, by + 76); }
+    else if (p.cooldown > 0) { ctx.fillStyle = '#d08080'; ctx.fillText('ضربه خطا رفت!', bx, by + 76); }
   } else {
     if (p.venom > 0) {
       const left = clamp(1 - p.venom / CONFIG.VENOM_DURATION, 0, 1);
@@ -2268,7 +2621,7 @@ const Input = {
     B[0].x = bx; B[0].y = by;
     B[1].x = bx - 104; B[1].y = by + 26;
     if (p.kind === 'snake') {
-      B[0].enabled = p.cooldown <= 0 && p.digest <= 0 && p.strikeT <= 0;
+      B[0].enabled = canStrike(p);
       B[0].ring = p.charging ? p.strikeCharge : (p.cooldown > 0 ? 1 - p.cooldown / CONFIG.STRIKE_COOLDOWN : 0);
     } else {
       B[0].enabled = p.squeakCd <= 0;
@@ -2326,7 +2679,7 @@ const Input = {
     const p = Game.player;
     if (!p || !p.alive) return;
     if (b.id === 'strike') {
-      if (isDown) { if (p.cooldown <= 0 && p.digest <= 0) { p.charging = true; vibrate(10); } }
+      if (isDown) { if (canStrike(p)) { p.charging = true; vibrate(10); } else vibrate(4); }
       else if (p.charging) releaseStrike(p);        // hold = charge, release = launch
     } else if (b.id === 'squeak') {
       if (isDown && p.squeakCd <= 0) { squeak(p); vibrate(15); }
@@ -2368,7 +2721,7 @@ const Input = {
     // never cancels the other).
     if (p.kind === 'snake') {
       const sp = !!this.keys.Space;
-      if (sp && !p.charging && p.cooldown <= 0 && p.digest <= 0) { p.charging = true; this.spaceCharge = true; }
+      if (sp && !p.charging && canStrike(p)) { p.charging = true; this.spaceCharge = true; }
       else if (!sp && this.spaceCharge) { this.spaceCharge = false; if (p.charging) releaseStrike(p); }
     } else {
       if (this.keys.Space && p.squeakCd <= 0) squeak(p);
