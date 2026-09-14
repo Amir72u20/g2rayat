@@ -1,0 +1,2536 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b140c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>کویر: مار و موش</title>
+<style>
+/* ---- Global reset: no external fonts, no external assets ---- */
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{width:100%;height:100%;overflow:hidden;background:#14100a;
+  font-family:Tahoma,Geneva,Verdana,"DejaVu Sans",sans-serif;color:#f2e6d2;
+  overscroll-behavior:none;touch-action:none}
+#game{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+
+.layer{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  flex-direction:column;z-index:10;pointer-events:none}
+.layer.on{display:flex;pointer-events:auto}
+.dim{background:radial-gradient(circle at 50% 45%,rgba(30,22,12,.82),rgba(8,6,4,.95))}
+
+.card{direction:rtl;text-align:center;max-width:min(92vw,460px);
+  padding:22px 20px;border-radius:18px;background:rgba(26,20,12,.94);
+  border:1px solid rgba(196,160,96,.35);box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.card h1{font-size:clamp(22px,6.4vw,34px);letter-spacing:.5px;margin-bottom:6px;color:#e8c98a}
+.card h2{font-size:clamp(18px,5.2vw,26px);margin-bottom:10px;color:#e8c98a}
+.card p{font-size:clamp(13px,3.7vw,16px);line-height:1.85;color:#cdbb9c}
+.card .big{font-size:clamp(28px,9vw,46px);font-weight:bold;margin:6px 0 10px}
+.snakeC{color:#9ad17a}.mouseC{color:#d9a97a}
+
+.btn{pointer-events:auto;display:inline-block;margin-top:16px;padding:14px 30px;
+  min-height:52px;border:0;border-radius:14px;cursor:pointer;
+  font-family:inherit;font-size:clamp(15px,4.4vw,19px);font-weight:bold;color:#20180d;
+  background:linear-gradient(180deg,#e8c98a,#c29b52);box-shadow:0 6px 0 #8a6a2e;
+  transition:transform .07s,box-shadow .07s}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 #8a6a2e}
+.btn.ghost{background:linear-gradient(180deg,#4a3c28,#332a1c);color:#e8d6b4;box-shadow:0 6px 0 #211a11}
+
+.stats{direction:rtl;margin:14px auto 2px;display:grid;grid-template-columns:1fr 1fr;
+  gap:8px 10px;font-size:clamp(12px,3.6vw,15px)}
+.stats div{background:rgba(0,0,0,.28);border-radius:10px;padding:8px 10px;
+  display:flex;justify-content:space-between;gap:10px}
+.stats b{color:#e8c98a;font-weight:bold}
+
+#hint{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);
+  z-index:8;display:flex;justify-content:center;pointer-events:none;padding:0 14px}
+#hint span{direction:rtl;background:rgba(18,13,7,.82);border:1px solid rgba(196,160,96,.3);
+  border-radius:12px;padding:9px 16px;font-size:clamp(12px,3.6vw,15px);color:#efe0c2;
+  opacity:0;transition:opacity .45s;text-align:center;line-height:1.7}
+#hint span.on{opacity:1}
+
+#topbtns{position:fixed;z-index:9;display:flex;gap:8px;
+  top:calc(env(safe-area-inset-top,0px) + 8px);left:calc(env(safe-area-inset-left,0px) + 8px)}
+.mini{pointer-events:auto;width:42px;height:42px;border:0;border-radius:12px;cursor:pointer;
+  background:rgba(20,15,9,.7);border:1px solid rgba(196,160,96,.28);color:#e8c98a;
+  font-size:18px;font-family:inherit;line-height:1}
+.mini:active{background:rgba(60,46,26,.9)}
+#toast{position:fixed;z-index:11;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 150px);
+  display:flex;justify-content:center;pointer-events:none}
+#toast span{direction:rtl;background:rgba(120,30,20,.86);border-radius:10px;padding:7px 14px;
+  font-size:clamp(12px,3.5vw,15px);opacity:0;transition:opacity .3s}
+#toast span.on{opacity:1}
+</style>
+
+<canvas id="game"></canvas>
+
+<div id="topbtns">
+  <button class="mini" id="btnMute" title="صدا">♪</button>
+  <button class="mini" id="btnPause" title="توقف">II</button>
+</div>
+
+<div id="hint"><span id="hintTxt"></span></div>
+<div id="toast"><span id="toastTxt"></span></div>
+
+<div class="layer dim on" id="scrMenu">
+  <div class="card">
+    <h1>کویر: مار و موش</h1>
+    <p>یک بوته‌زار خشک. دو گونه. یک قانون:<br>
+    <b style="color:#e8c98a">صبور باش، وگرنه شکار می‌شوی.</b></p>
+    <p style="margin-top:10px;font-size:13px;color:#9d8a6c">
+    نیمه چپ صفحه = جوی‌استیک &nbsp;•&nbsp; رها کنی، می‌ایستی<br>
+    دسکتاپ: WASD یا کلیدهای جهت، Space، Shift، E</p>
+    <button class="btn" id="btnStart">شروع بازی</button>
+  </div>
+</div>
+
+<div class="layer dim" id="scrSpawn">
+  <div class="card">
+    <h2>این دور:</h2>
+    <div class="big" id="spawnRole">مار</div>
+    <p id="spawnTxt"></p>
+  </div>
+</div>
+
+<div class="layer dim" id="scrDead">
+  <div class="card">
+    <h2 id="deadTitle">مُردی</h2>
+    <p id="deadTxt"></p>
+    <div class="stats">
+      <div><span>بیشترین جرم</span><b id="stMass">۰</b></div>
+      <div><span>شکار</span><b id="stKills">۰</b></div>
+      <div><span>زمان زنده ماندن</span><b id="stTime">۰</b></div>
+      <div><span>رتبه</span><b id="stRank">۰</b></div>
+    </div>
+    <button class="btn" id="btnAgain">دوباره</button>
+  </div>
+</div>
+
+<div class="layer dim" id="scrPause">
+  <div class="card">
+    <h2>توقف</h2>
+    <p>بازی متوقف شد.</p>
+    <button class="btn" id="btnResume">ادامه</button>
+    <button class="btn ghost" id="btnQuit">پایان این جان</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+   کویر: مار و موش  —  single-file survival arena
+   Modules below (in order): Config, Utils/Noise, Audio, World, Grid,
+   Entities, AI, Renderer, UI, Input, GameLoop.
+   All balance numbers live in CONFIG — tweak there, nowhere else.
+   ===================================================================== */
+
+/* ----------------------------- 1. CONFIG ---------------------------- */
+const CONFIG = {
+  WORLD_SIZE: 6000,
+  START_MASS: 10,
+  SNAKE_BASE_SPEED: 165,      // px/s
+  SNAKE_MIN_SPEED: 62,
+  SNAKE_SPEED_EXP: 0.28,
+  MOUSE_BASE_SPEED: 150,
+  MOUSE_MIN_SPEED: 58,
+  MOUSE_SPEED_EXP: 0.22,
+  STRIKE_MULT: 3.5,
+  STRIKE_DURATION: 0.35,
+  STRIKE_COOLDOWN: 1.2,
+  STRIKE_CHARGE_TIME: 0.55,   // hold time for a full-power strike
+  AMBUSH_CHARGE_TIME: 2.5,
+  AMBUSH_ENTER_TIME: 1.0,     // must stay still this long inside a bush
+  AMBUSH_BONUS: 2.0,
+  SWALLOW_RATIO: 1.0,         // r <= this  => instant swallow
+  VENOM_RATIO: 2.5,           // r >= this  => the mouse may fight back
+  VENOM_DURATION: 18,
+  VENOM_SLOW_FLOOR: 0.30,
+  HEAL_RADIUS: 120,
+  HEAL_TIME: 5,
+  HEALER_SLOW: 0.75,
+  BURROW_SAFE_TIME: 8,
+  BURROW_MAX_MASS: 42,        // a fat mouse simply does not fit (comedy + balance)
+  DAY_NIGHT_CYCLE: 240,
+  SEED_VALUE: 1.0,
+  SEED_VALUE_IN_BUSH: 2.0,
+  SEED_COUNT: 900,
+  SEED_RESPAWN_PER_SEC: 14,
+  CORPSE_MASS_RATIO: 0.6,
+  CORPSE_LIFETIME: 20,
+  BOT_COUNT: 40,
+  SNAKE_BOT_SHARE: 0.45,      // fraction of bots that are snakes
+  SPAWN_IMMUNITY: 3,
+  DIGEST_BASE: 1.5,
+  DIGEST_SLOW: 0.5,
+  VIBRATION_RADIUS: 400,      // mouse "feels" fast movement inside this radius
+  SNAKE_CATCH_RATIO: 1.8,     // snake must be this much heavier to eat a snake
+  MELEE_DPS: 1.6,             // damage multiplier in mouse-vs-snake brawls
+  HP_PER_MASS: 10,
+  SQUEAK_RADIUS: 900,
+  PIT_ORGAN_RANGE: 520        // snake heat vision at night
+};
+
+/* --------------------------- 2. UTILITIES --------------------------- */
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rndInt = (a, b) => (a + Math.random() * (b - a + 1)) | 0;
+const pick = arr => arr[(Math.random() * arr.length) | 0];
+function angDiff(a, b) { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return d; }
+function angMove(a, b, maxStep) { const d = angDiff(a, b); return a + clamp(d, -maxStep, maxStep); }
+function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+const FA = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+function fa(n) { return String(n).replace(/\d/g, d => FA[+d]); }
+
+// Cheap deterministic value-noise (wind, terrain). No allocations at runtime.
+const NOISE_N = 256;
+const noiseTab = new Float32Array(NOISE_N);
+for (let i = 0; i < NOISE_N; i++) noiseTab[i] = Math.random();
+function hash2(x, y) {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = (h ^ (h >> 13)) * 1274126177 | 0;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967295;
+}
+function vnoise(x, y) {                 // smooth value noise in [0,1]
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+  return lerp(lerp(a, b, u), lerp(c, d, u), v);
+}
+
+/* ----------------------------- 3. AUDIO ----------------------------- */
+// Every sound is synthesised with the Web Audio API — zero audio files.
+const Sound = {
+  ctx: null, master: null, muted: false, ready: false,
+  windGain: null, nightGain: null, lastHeart: 0,
+
+  init() {
+    if (this.ready) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { this.ctx = new AC(); } catch (e) { return; }
+    const ctx = this.ctx;
+    this.master = ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 0.85;
+    this.master.connect(ctx.destination);
+
+    // Shared noise buffer (2 s of white noise) reused by every noisy effect.
+    const len = ctx.sampleRate * 2;
+    this.noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = this.noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    // Continuous desert wind: looped noise through a slowly wobbling lowpass.
+    const wind = ctx.createBufferSource(); wind.buffer = this.noiseBuf; wind.loop = true;
+    const wf = ctx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420; wf.Q.value = 0.7;
+    this.windGain = ctx.createGain(); this.windGain.gain.value = 0.075;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 180;
+    lfo.connect(lfoG); lfoG.connect(wf.frequency);
+    wind.connect(wf); wf.connect(this.windGain); this.windGain.connect(this.master);
+    wind.start(); lfo.start();
+
+    // Night drone pad — faded in after dusk.
+    this.nightGain = ctx.createGain(); this.nightGain.gain.value = 0;
+    this.nightGain.connect(this.master);
+    [55, 82.5, 110.3].forEach((f, i) => {
+      const o = ctx.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f;
+      const g = ctx.createGain(); g.gain.value = 0.16 / (i + 1);
+      o.connect(g); g.connect(this.nightGain); o.start();
+    });
+    this.ready = true;
+  },
+  resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.85; },
+  now() { return this.ctx ? this.ctx.currentTime : 0; },
+  ok() { return this.ready && !this.muted && this.ctx && this.ctx.state === 'running'; },
+
+  // Short filtered-noise burst: rustle, hiss, whoosh, sand.
+  noise(vol, dur, type, f0, f1, q) {
+    if (!this.ok() || vol < 0.006) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const s = ctx.createBufferSource(); s.buffer = this.noiseBuf;
+    s.playbackRate.value = 0.8 + Math.random() * 0.5;
+    const f = ctx.createBiquadFilter(); f.type = type; f.Q.value = q || 1;
+    f.frequency.setValueAtTime(f0, t);
+    f.frequency.exponentialRampToValueAtTime(Math.max(60, f1), t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.16);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master);
+    s.start(t); s.stop(t + dur + 0.02);
+  },
+  tone(vol, dur, type, f0, f1, detune) {
+    if (!this.ok() || vol < 0.006) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    if (detune) o.detune.value = detune;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  rustle(v) { this.noise(0.16 * v, 0.22, 'bandpass', 2600, 1400, 1.2); },
+  hiss(v)   { this.noise(0.14 * v, 0.55, 'bandpass', 5200, 2600, 0.9); },
+  whoosh(v) { this.noise(0.22 * v, 0.26, 'bandpass', 900, 3200, 1.6); },
+  sand(v)   { this.noise(0.10 * v, 0.30, 'lowpass', 1400, 300, 1); },
+  squeak(v) {                                  // exaggerated mouse scream
+    this.tone(0.20 * v, 0.26, 'sawtooth', 1500 + Math.random() * 500, 620);
+    this.tone(0.10 * v, 0.20, 'square', 2400, 1100, 12);
+  },
+  gulp(v) { this.tone(0.24 * v, 0.30, 'sine', 190, 62); this.noise(0.10 * v, 0.22, 'lowpass', 700, 160, 1); },
+  bite(v) { this.noise(0.18 * v, 0.12, 'bandpass', 1800, 500, 2); this.tone(0.12 * v, 0.14, 'square', 140, 60); },
+  heal(v) { this.tone(0.13 * v, 0.5, 'sine', 520, 1040); this.tone(0.09 * v, 0.6, 'triangle', 780, 1560); },
+  heart(v, fast) {                             // two thumps, rate driven by danger
+    const t = this.now();
+    if (t - this.lastHeart < (fast ? 0.44 : 0.92)) return;
+    this.lastHeart = t;
+    this.tone(0.30 * v, 0.16, 'sine', 68, 34);
+    setTimeout(() => this.tone(0.20 * v, 0.14, 'sine', 60, 30), fast ? 130 : 190);
+  },
+  setNight(n) { if (this.nightGain) this.nightGain.gain.value = 0.10 * n; }
+};
+
+/* -------------------- 4. SPATIAL HASH (never O(n^2)) ---------------- */
+const CELL = 220;
+class Grid {
+  constructor(size) {
+    this.cols = Math.ceil(size / CELL) + 1;
+    this.cells = new Array(this.cols * this.cols);
+    for (let i = 0; i < this.cells.length; i++) this.cells[i] = [];
+  }
+  clear() { for (let i = 0; i < this.cells.length; i++) if (this.cells[i].length) this.cells[i].length = 0; }
+  idx(x, y) {
+    const cx = clamp((x / CELL) | 0, 0, this.cols - 1);
+    const cy = clamp((y / CELL) | 0, 0, this.cols - 1);
+    return cy * this.cols + cx;
+  }
+  insert(o) { this.cells[this.idx(o.x, o.y)].push(o); }
+  // Fills `out` with candidates inside the square around (x,y); returns out.
+  query(x, y, r, out) {
+    out.length = 0;
+    const c0 = clamp(((x - r) / CELL) | 0, 0, this.cols - 1);
+    const c1 = clamp(((x + r) / CELL) | 0, 0, this.cols - 1);
+    const r0 = clamp(((y - r) / CELL) | 0, 0, this.cols - 1);
+    const r1 = clamp(((y + r) / CELL) | 0, 0, this.cols - 1);
+    for (let cy = r0; cy <= r1; cy++) {
+      const base = cy * this.cols;
+      for (let cx = c0; cx <= c1; cx++) {
+        const cell = this.cells[base + cx];
+        for (let i = 0; i < cell.length; i++) out.push(cell[i]);
+      }
+    }
+    return out;
+  }
+}
+
+/* ------------------------------ 5. WORLD ---------------------------- */
+const World = {
+  size: CONFIG.WORLD_SIZE,
+  bushes: [], props: [], seeds: [], burrows: [], corpses: [],
+  particles: [], trails: [], waves: [], rustles: [],
+  bushGrid: null, seedGrid: null, entGrid: null,
+  time: 0,            // seconds since world start (day/night clock)
+  seedTimer: 0,
+
+  generate() {
+    const S = this.size;
+    this.bushes.length = 0; this.props.length = 0; this.burrows.length = 0;
+    this.corpses.length = 0;
+
+    // --- Bushes: overlapping clusters make safe corridors and death traps ---
+    const clusters = 46;
+    for (let c = 0; c < clusters; c++) {
+      const cx = rnd(420, S - 420), cy = rnd(420, S - 420);
+      const n = rndInt(2, 5);
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * TAU, d = rnd(0, 260);
+        const r = rnd(80, 300);
+        const x = clamp(cx + Math.cos(a) * d, 260, S - 260);
+        const y = clamp(cy + Math.sin(a) * d, 260, S - 260);
+        this.bushes.push(this.makeBush(x, y, r));
+      }
+    }
+    for (let i = 0; i < 34; i++) {  // lone bushes scattered between clusters
+      this.bushes.push(this.makeBush(rnd(260, S - 260), rnd(260, S - 260), rnd(80, 170)));
+    }
+
+    // --- Static scenery: rocks, bones, cracked dirt patches ---
+    for (let i = 0; i < 520; i++) {
+      const t = Math.random();
+      this.props.push({
+        x: rnd(60, S - 60), y: rnd(60, S - 60),
+        r: t < 0.55 ? rnd(6, 22) : (t < 0.82 ? rnd(28, 70) : rnd(10, 26)),
+        a: Math.random() * TAU,
+        kind: t < 0.55 ? 0 : (t < 0.82 ? 1 : 2)   // 0 rock, 1 cracked dirt, 2 bones
+      });
+    }
+
+    // --- Burrows: mouse-only shelters, never inside a bush ---
+    let tries = 0;
+    while (this.burrows.length < 70 && tries < 3000) {
+      tries++;
+      const x = rnd(140, S - 140), y = rnd(140, S - 140);
+      if (this.bushAt(x, y)) continue;
+      this.burrows.push({ x, y, r: 16, occupant: null });
+    }
+
+    // --- Seed pool (object pooling: allocated once, recycled forever) ---
+    this.seeds.length = 0;
+    for (let i = 0; i < CONFIG.SEED_COUNT; i++) this.seeds.push({ x: 0, y: 0, active: false, inBush: false, g: 0 });
+    for (let i = 0; i < CONFIG.SEED_COUNT; i++) this.spawnSeed();
+
+    // --- Pools for transient effects (no allocation inside the game loop) ---
+    this.particles.length = 0;
+    for (let i = 0; i < 460; i++) this.particles.push({ active: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 2, kind: 0, rot: 0 });
+    this.trails.length = 0;
+    for (let i = 0; i < 200; i++) this.trails.push({ active: false, x: 0, y: 0, a: 0, w: 6, life: 0 });
+    this.waves.length = 0;
+    for (let i = 0; i < 40; i++) this.waves.push({ active: false, x: 0, y: 0, r: 0, life: 0, strong: 0 });
+    this.rustles.length = 0;
+    for (let i = 0; i < 40; i++) this.rustles.push({ active: false, x: 0, y: 0, life: 0 });
+    this.corpses.length = 0;
+    for (let i = 0; i < 60; i++) this.corpses.push({ active: false, x: 0, y: 0, mass: 0, life: 0, type: 0, a: 0 });
+
+    // --- Spatial hashes ---
+    this.bushGrid = new Grid(S); this.seedGrid = new Grid(S); this.entGrid = new Grid(S);
+    for (const b of this.bushes) {  // a bush can span several cells: register footprint
+      const c0 = clamp(((b.x - b.r) / CELL) | 0, 0, this.bushGrid.cols - 1);
+      const c1 = clamp(((b.x + b.r) / CELL) | 0, 0, this.bushGrid.cols - 1);
+      const r0 = clamp(((b.y - b.r) / CELL) | 0, 0, this.bushGrid.cols - 1);
+      const r1 = clamp(((b.y + b.r) / CELL) | 0, 0, this.bushGrid.cols - 1);
+      for (let cy = r0; cy <= r1; cy++) for (let cx = c0; cx <= c1; cx++) this.bushGrid.cells[cy * this.bushGrid.cols + cx].push(b);
+    }
+    this.reindexSeeds();
+    this.time = rnd(0, CONFIG.DAY_NIGHT_CYCLE * 0.35);
+  },
+
+  makeBush(x, y, r) {
+    // Pre-computed leaf blobs so rendering never allocates.
+    const blobs = [];
+    const n = clamp(Math.round(r * 0.20), 6, 34);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, d = Math.pow(Math.random(), 0.65) * r * 0.92;
+      blobs.push({
+        dx: Math.cos(a) * d, dy: Math.sin(a) * d * 0.86,
+        r: rnd(r * 0.16, r * 0.34), a: Math.random() * TAU,
+        ph: Math.random() * TAU, tone: Math.random()
+      });
+    }
+    return { x, y, r, blobs, shake: 0, ph: Math.random() * TAU };
+  },
+
+  bushAt(x, y) {
+    const cells = this.bushGrid ? this.bushGrid.query(x, y, 4, tmpA) : this.bushes;
+    for (let i = 0; i < cells.length; i++) {
+      const b = cells[i];
+      if (dist2(x, y, b.x, b.y) < b.r * b.r) return b;
+    }
+    return null;
+  },
+
+  spawnSeed() {
+    for (let i = 0; i < this.seeds.length; i++) {
+      const s = this.seeds[i];
+      if (s.active) continue;
+      // Seeds grow only inside bushes and in a 150 px ring around them:
+      // the mouse's food is exactly where the snake is hiding.
+      const b = this.bushes[(Math.random() * this.bushes.length) | 0];
+      const a = Math.random() * TAU;
+      const d = Math.random() < 0.45 ? Math.random() * b.r * 0.9 : b.r + Math.random() * 150;
+      s.x = clamp(b.x + Math.cos(a) * d, 20, this.size - 20);
+      s.y = clamp(b.y + Math.sin(a) * d, 20, this.size - 20);
+      s.inBush = d < b.r;
+      s.g = Math.random() * TAU;
+      s.active = true;
+      return s;
+    }
+    return null;
+  },
+  reindexSeeds() {
+    this.seedGrid.clear();
+    for (let i = 0; i < this.seeds.length; i++) if (this.seeds[i].active) this.seedGrid.insert(this.seeds[i]);
+  },
+
+  spawnCorpse(x, y, mass, type) {
+    for (let i = 0; i < this.corpses.length; i++) {
+      const c = this.corpses[i];
+      if (c.active) continue;
+      c.active = true; c.x = x; c.y = y; c.mass = mass * CONFIG.CORPSE_MASS_RATIO;
+      c.life = CONFIG.CORPSE_LIFETIME; c.type = type; c.a = Math.random() * TAU;
+      return c;
+    }
+    return null;
+  },
+  particle(x, y, vx, vy, life, size, kind) {
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+      if (p.active) continue;
+      p.active = true; p.x = x; p.y = y; p.vx = vx; p.vy = vy;
+      p.life = life; p.max = life; p.size = size; p.kind = kind; p.rot = Math.random() * TAU;
+      return p;
+    }
+    return null;
+  },
+  trail(x, y, a, w) {
+    for (let i = 0; i < this.trails.length; i++) {
+      const t = this.trails[i];
+      if (t.active) continue;
+      t.active = true; t.x = x; t.y = y; t.a = a; t.w = w; t.life = 6;
+      return t;
+    }
+    return null;
+  },
+  wave(x, y, strong) {
+    for (let i = 0; i < this.waves.length; i++) {
+      const w = this.waves[i];
+      if (w.active) continue;
+      w.active = true; w.x = x; w.y = y; w.r = 10; w.life = 1; w.strong = strong;
+      return w;
+    }
+    return null;
+  },
+  rustle(x, y) {
+    for (let i = 0; i < this.rustles.length; i++) {
+      const r = this.rustles[i];
+      if (r.active) continue;
+      r.active = true; r.x = x; r.y = y; r.life = 0.8;
+      return r;
+    }
+    return null;
+  },
+
+  // 0 = deep night, 1 = full day. Smooth dawn/dusk transitions.
+  dayFactor() {
+    const p = (this.time % CONFIG.DAY_NIGHT_CYCLE) / CONFIG.DAY_NIGHT_CYCLE;
+    const s = Math.sin(p * TAU - Math.PI / 2) * 0.5 + 0.5;   // 0..1..0
+    return clamp((s - 0.18) / 0.5, 0, 1);
+  },
+  isNight() { return this.dayFactor() < 0.4; },
+
+  update(dt) {
+    this.time += dt;
+    // Seed respawn keeps the ecosystem fed at a balanced rate.
+    this.seedTimer += dt * CONFIG.SEED_RESPAWN_PER_SEC;
+    let made = false;
+    while (this.seedTimer >= 1) { this.seedTimer -= 1; if (this.spawnSeed()) made = true; }
+    if (made) this.reindexSeeds();
+
+    for (let i = 0; i < this.particles.length; i++) {
+      const p = this.particles[i];
+      if (!p.active) continue;
+      p.life -= dt;
+      if (p.life <= 0) { p.active = false; continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.vx *= 0.94; p.vy *= 0.94;
+      if (p.kind === 2) p.vy += 40 * dt;  // blood drops fall a little
+    }
+    for (let i = 0; i < this.trails.length; i++) { const t = this.trails[i]; if (t.active && (t.life -= dt) <= 0) t.active = false; }
+    for (let i = 0; i < this.waves.length; i++) {
+      const w = this.waves[i];
+      if (!w.active) continue;
+      w.life -= dt * 1.4; w.r += 230 * dt;
+      if (w.life <= 0) w.active = false;
+    }
+    for (let i = 0; i < this.rustles.length; i++) { const r = this.rustles[i]; if (r.active && (r.life -= dt) <= 0) r.active = false; }
+    for (let i = 0; i < this.corpses.length; i++) { const c = this.corpses[i]; if (c.active && (c.life -= dt) <= 0) c.active = false; }
+    for (let i = 0; i < this.bushes.length; i++) { const b = this.bushes[i]; if (b.shake > 0) b.shake = Math.max(0, b.shake - dt * 1.6); }
+  }
+};
+const tmpA = [], tmpB = [], tmpC = [];
+
+/* ---------------------------- 6. ENTITIES --------------------------- */
+let nextId = 1;
+
+function snakeRadius(m) { return 4.5 + Math.sqrt(m) * 1.35; }
+function mouseRadius(m) { return 5 + Math.sqrt(m) * 1.25; }
+
+function makeSnake(x, y, mass, isPlayer) {
+  const e = {
+    id: nextId++, kind: 'snake', isPlayer: !!isPlayer, alive: true,
+    x, y, angle: Math.random() * TAU, desired: 0, throttle: 0, mass,
+    hp: mass * CONFIG.HP_PER_MASS, maxHp: mass * CONFIG.HP_PER_MASS,
+    r: snakeRadius(mass), segs: [], bulges: [],
+    wave: Math.random() * TAU, tongue: Math.random() * 1.5, tongueOut: 0,
+    ambush: false, stillT: 0, coil: 0,
+    strikeCharge: 0, charging: false, strikeT: 0, cooldown: 0, strikePower: 0,
+    digest: 0, immune: CONFIG.SPAWN_IMMUNITY, inBush: null, bushT: 0,
+    kills: 0, maxMass: mass, born: 0, trailT: 0, hissT: rnd(2, 8),
+    state: 'WANDER', stateT: 0, wx: x, wy: y, prey: null, patience: rnd(3, 10),
+    sloppy: Math.random() < 0.28,     // careless bots keep the world unpredictable
+    tickOff: rndInt(0, 3), flash: 0
+  };
+  e.desired = e.angle;
+  const n = snakeSegCount(mass);
+  for (let i = 0; i < n; i++) e.segs.push({ x: x - Math.cos(e.angle) * i * 6, y: y - Math.sin(e.angle) * i * 6 });
+  return e;
+}
+function snakeSegCount(m) { return clamp(Math.round(9 + m * 0.55), 9, 64); }
+
+function makeMouse(x, y, mass, isPlayer) {
+  return {
+    id: nextId++, kind: 'mouse', isPlayer: !!isPlayer, alive: true,
+    x, y, angle: Math.random() * TAU, desired: 0, throttle: 0, mass,
+    hp: mass * CONFIG.HP_PER_MASS, maxHp: mass * CONFIG.HP_PER_MASS,
+    r: mouseRadius(mass),
+    venom: 0, venomLayers: 0, healProg: 0, healBreak: 0, healing: false, helper: false,
+    burrow: null, burrowT: 0, exitT: 0,
+    squeakCd: 0, fear: 0, hop: Math.random() * TAU, tail: Math.random() * TAU,
+    immune: CONFIG.SPAWN_IMMUNITY, inBush: null, kills: 0, maxMass: mass, born: 0,
+    state: 'FORAGE', stateT: 0, wx: x, wy: y, target: null, ally: null,
+    sloppy: Math.random() < 0.3, tickOff: rndInt(0, 3), flash: 0, seedsEaten: 0
+  };
+}
+
+function baseSpeed(e) {
+  if (e.kind === 'snake') {
+    return Math.max(CONFIG.SNAKE_MIN_SPEED,
+      CONFIG.SNAKE_BASE_SPEED * Math.pow(CONFIG.START_MASS / e.mass, CONFIG.SNAKE_SPEED_EXP));
+  }
+  return Math.max(CONFIG.MOUSE_MIN_SPEED,
+    CONFIG.MOUSE_BASE_SPEED * Math.pow(CONFIG.START_MASS / e.mass, CONFIG.MOUSE_SPEED_EXP));
+}
+function turnRate(e) {
+  if (e.kind === 'snake') {
+    // Turning slows with size exactly like speed: a big snake cannot chase.
+    return Math.max(1.05, 3.7 * Math.pow(CONFIG.START_MASS / e.mass, CONFIG.SNAKE_SPEED_EXP));
+  }
+  return Math.max(2.3, 6.6 * Math.pow(CONFIG.START_MASS / e.mass, CONFIG.MOUSE_SPEED_EXP));
+}
+function currentSpeed(e) {
+  let s = baseSpeed(e);
+  if (e.kind === 'snake') {
+    if (e.strikeT > 0) s *= CONFIG.STRIKE_MULT * (0.72 + 0.28 * e.strikePower) * (e.strikeAmbush ? 1.25 : 1);
+    else if (e.cooldown > 0) s *= 0.45;          // a missed strike really hurts
+    if (e.digest > 0) s *= CONFIG.DIGEST_SLOW;
+  } else {
+    if (e.venom > 0) {
+      const k = clamp(e.venom / CONFIG.VENOM_DURATION, 0, 1);
+      s *= lerp(1, CONFIG.VENOM_SLOW_FLOOR, k);
+    }
+    if (e.helper) s *= CONFIG.HEALER_SLOW;       // helping is genuinely dangerous
+    if (e.exitT > 0) s *= 0.35;
+  }
+  return s;
+}
+
+function setMass(e, m) {
+  e.mass = clamp(m, 2, 4000);
+  e.maxHp = e.mass * CONFIG.HP_PER_MASS;
+  if (e.hp > e.maxHp) e.hp = e.maxHp;
+  e.maxMass = Math.max(e.maxMass, e.mass);
+  if (e.kind === 'snake') {
+    e.r = snakeRadius(e.mass);
+    const want = snakeSegCount(e.mass);
+    while (e.segs.length < want) {
+      const last = e.segs[e.segs.length - 1];
+      e.segs.push({ x: last.x, y: last.y });
+    }
+    while (e.segs.length > want) e.segs.pop();
+  } else e.r = mouseRadius(e.mass);
+}
+
+/* Physics: fixed timestep, damped rotation, full stop when input is released. */
+function moveEntity(e, dt) {
+  const tr = turnRate(e) * (e.kind === 'snake' && e.strikeT > 0 ? 0.35 : 1);
+  e.angle = angMove(e.angle, e.desired, tr * dt);
+
+  let thr = clamp(e.throttle, 0, 1);
+  if (e.kind === 'snake' && e.strikeT > 0) thr = 1;
+  if (e.kind === 'mouse' && e.burrow) thr = 0;
+
+  const sp = currentSpeed(e) * thr;
+  if (sp > 0.01) {
+    e.x += Math.cos(e.angle) * sp * dt;
+    e.y += Math.sin(e.angle) * sp * dt;
+  }
+  const m = 34, S = World.size;
+  if (e.x < m) { e.x = m; } if (e.x > S - m) { e.x = S - m; }
+  if (e.y < m) { e.y = m; } if (e.y > S - m) { e.y = S - m; }
+  e.speedNow = sp;
+  e.inBush = World.bushAt(e.x, e.y);
+
+  // Fast movement inside a bush shakes the leaves: visible + audible from outside.
+  if (e.inBush && sp > baseSpeed(e) * 0.45) {
+    e.inBush.shake = Math.min(1, e.inBush.shake + dt * 3.2);
+    if (Math.random() < dt * 6) {
+      World.rustle(e.x + rnd(-14, 14), e.y + rnd(-14, 14));
+      const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
+      if (d < 900) Sound.rustle(clamp(1 - d / 900, 0, 1) * 0.8);
+    }
+  }
+  // Anything moving fast sends a ground vibration a mouse can feel.
+  if (sp > baseSpeed(e) * 0.5 && Math.random() < dt * 3.4) World.wave(e.x, e.y, sp / baseSpeed(e));
+}
+
+function updateSnakeBody(e, dt) {
+  const segs = e.segs, spacing = e.r * 0.62;
+  segs[0].x = e.x; segs[0].y = e.y;
+  for (let i = 1; i < segs.length; i++) {
+    const p = segs[i - 1], s = segs[i];
+    let dx = s.x - p.x, dy = s.y - p.y;
+    let d = Math.sqrt(dx * dx + dy * dy);
+    if (d < 0.0001) { dx = -Math.cos(e.angle); dy = -Math.sin(e.angle); d = 1; }
+    const k = spacing / d;
+    s.x = p.x + dx * k; s.y = p.y + dy * k;
+  }
+  // Sinusoidal crawl wave — amplitude grows with speed, giving real slither.
+  e.wave += dt * (2.2 + (e.speedNow || 0) / 34);
+  e.waveAmp = lerp(e.waveAmp || 0, e.r * (0.20 + 0.52 * clamp((e.speedNow || 0) / baseSpeed(e), 0, 1.4)), dt * 6);
+
+  // Sand drag marks left by the body, slowly fading.
+  e.trailT -= dt;
+  if (e.trailT <= 0 && (e.speedNow || 0) > 12) {
+    e.trailT = 0.10;
+    const t = segs[(segs.length * 0.7) | 0];
+    World.trail(t.x, t.y, e.angle, e.r * 1.4);
+  }
+  // Digestion bulges travelling down the body.
+  for (let i = e.bulges.length - 1; i >= 0; i--) {
+    const b = e.bulges[i];
+    b.t += dt / Math.max(1.2, b.dur);
+    if (b.t >= 1) e.bulges.splice(i, 1);
+  }
+}
+
+function updateSnake(e, dt) {
+  e.immune = Math.max(0, e.immune - dt);
+  e.digest = Math.max(0, e.digest - dt);
+  e.cooldown = Math.max(0, e.cooldown - dt);
+  e.flash = Math.max(0, e.flash - dt * 2);
+  if (e.strikeT > 0) {
+    e.strikeT -= dt;
+    if (Math.random() < dt * 30) World.particle(e.x + rnd(-6, 6), e.y + rnd(-6, 6), rnd(-40, 40), rnd(-40, 40), 0.45, rnd(1.5, 3.4), 0);
+    if (e.strikeT <= 0) { e.cooldown = CONFIG.STRIKE_COOLDOWN; e.strikeAmbush = false; }
+  }
+  // Forked tongue flicks out about every 1.5 s.
+  e.tongue -= dt;
+  if (e.tongue <= 0) { e.tongue = rnd(1.2, 1.9); e.tongueOut = 0.45; }
+  e.tongueOut = Math.max(0, e.tongueOut - dt);
+
+  // --- Ambush: inside a bush + practically motionless => invisible predator ---
+  const still = e.throttle < 0.06 && e.strikeT <= 0;
+  if (still && e.inBush) {
+    e.stillT += dt;
+    if (e.stillT >= CONFIG.AMBUSH_ENTER_TIME) {
+      if (!e.ambush && e.isPlayer) Sound.hiss(0.5);
+      e.ambush = true;
+      e.coil = clamp(e.coil + dt / CONFIG.AMBUSH_CHARGE_TIME, 0, 1);
+    }
+  } else {
+    e.stillT = 0;
+    if (e.ambush) { e.ambush = false; }
+    e.coil = Math.max(0, e.coil - dt * 0.8);      // tension drains once you move
+  }
+  if (e.charging) e.strikeCharge = clamp(e.strikeCharge + dt / CONFIG.STRIKE_CHARGE_TIME, 0, 1);
+
+  e.hissT -= dt;
+  if (e.hissT <= 0) {
+    e.hissT = rnd(4, 11);
+    const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
+    if (d < 700) Sound.hiss(clamp(1 - d / 700, 0, 1) * 0.5);
+  }
+  moveEntity(e, dt);
+  updateSnakeBody(e, dt);
+  setMass(e, e.mass);
+}
+
+function releaseStrike(e) {
+  if (e.cooldown > 0 || e.strikeT > 0 || e.digest > 0) { e.charging = false; e.strikeCharge = 0; return; }
+  const power = Math.max(0.25, e.strikeCharge);
+  e.strikePower = power;
+  e.strikeAmbush = e.coil >= 0.999 || (e.ambush && e.coil > 0.6);
+  // Patience pays: a fully coiled ambush strike reaches twice as far, twice as fast.
+  e.strikeT = CONFIG.STRIKE_DURATION * (e.strikeAmbush ? CONFIG.AMBUSH_BONUS : 1) * (0.6 + 0.4 * power);
+  e.charging = false; e.strikeCharge = 0;
+  e.coil = 0; e.ambush = false; e.stillT = 0;
+  const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
+  if (d < 900) Sound.whoosh(clamp(1 - d / 900, 0, 1));
+  for (let i = 0; i < 8; i++) World.particle(e.x, e.y, rnd(-90, 90), rnd(-90, 90), 0.5, rnd(2, 4), 0);
+  if (e.isPlayer) vibrate(18);
+}
+
+function updateMouse(e, dt) {
+  e.immune = Math.max(0, e.immune - dt);
+  e.squeakCd = Math.max(0, e.squeakCd - dt);
+  e.exitT = Math.max(0, e.exitT - dt);
+  e.flash = Math.max(0, e.flash - dt * 2);
+  e.hop += dt * (4 + (e.speedNow || 0) / 16);
+  e.tail += dt * (3 + (e.speedNow || 0) / 22);
+  e.fear = Math.max(0, e.fear - dt * 0.5);
+
+  if (e.burrow) {                                  // safe underground, but starving
+    e.burrowT -= dt;
+    e.x = e.burrow.x; e.y = e.burrow.y;
+    if (e.burrowT <= 0) leaveBurrow(e);
+  }
+  if (e.venom > 0) {
+    e.venom += dt * (1 + 0.35 * Math.max(0, e.venomLayers - 1));
+    if (e.venom >= CONFIG.VENOM_DURATION) { killEntity(e, null, 'زهر'); return; }
+  }
+  e.helper = false;                                // recomputed every step by healing logic
+  moveEntity(e, dt);
+  setMass(e, e.mass);
+}
+
+function enterBurrow(e, b) {
+  if (e.mass > CONFIG.BURROW_MAX_MASS) { if (e.isPlayer) toast('خیلی چاق شده‌ای! داخل سوراخ جا نمی‌شوی'); return false; }
+  if (b.occupant && b.occupant !== e) return false;
+  b.occupant = e; e.burrow = b; e.burrowT = CONFIG.BURROW_SAFE_TIME;
+  e.x = b.x; e.y = b.y;
+  Sound.sand(0.5);
+  return true;
+}
+function leaveBurrow(e) {
+  if (!e.burrow) return;
+  e.burrow.occupant = null; e.burrow = null;
+  e.exitT = 0.5;                                   // 0.5 s of vulnerable climb-out
+  Sound.sand(0.4);
+}
+
+/* --------------------- Interactions & killing ----------------------- */
+function killEntity(e, by, cause) {
+  if (!e.alive) return;
+  e.alive = false;
+  e.deathCause = cause || '';
+  World.spawnCorpse(e.x, e.y, e.mass, e.kind === 'snake' ? 1 : 0);
+  const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
+  const v = clamp(1 - d / 1100, 0, 1);
+  if (e.kind === 'mouse') Sound.squeak(v); else Sound.hiss(v);
+  for (let i = 0; i < 14; i++)
+    World.particle(e.x, e.y, rnd(-120, 120), rnd(-120, 120), rnd(0.5, 1.1), rnd(2, 5), 2);
+  if (by) by.kills++;
+  if (e.isPlayer) Game.onPlayerDeath(cause);
+}
+
+function swallow(snake, mouse) {
+  setMass(snake, snake.mass + mouse.mass * 0.85);
+  snake.bulges.push({ t: 0, dur: CONFIG.DIGEST_BASE + mouse.mass / 8, size: mouse.r });
+  snake.digest = CONFIG.DIGEST_BASE + mouse.mass / 8;   // greedy back-to-back hunting = suicide
+  snake.kills++;
+  mouse.alive = false;
+  if (mouse.burrow) { mouse.burrow.occupant = null; mouse.burrow = null; }
+  const d = Math.sqrt(dist2(snake.x, snake.y, Camera.x, Camera.y));
+  const v = clamp(1 - d / 1000, 0, 1);
+  Sound.squeak(v * 0.9); Sound.gulp(v);
+  for (let i = 0; i < 10; i++) World.particle(mouse.x, mouse.y, rnd(-70, 70), rnd(-70, 70), 0.7, rnd(2, 4), 2);
+  if (mouse.isPlayer) Game.onPlayerDeath('بلعیده شدی');
+  if (snake.isPlayer) { vibrate(45); Game.flashMsg('بلعیدی!'); }
+  snake.tongueOut = 0.6;
+}
+
+function envenomate(snake, mouse) {
+  if (mouse.venom <= 0) mouse.venom = 0.01;
+  mouse.venomLayers++;
+  mouse.fear = 1;
+  mouse.hp -= mouse.maxHp * 0.12;
+  snake.prey = mouse;                        // the snake now tracks it on the minimap
+  snake.cooldown = Math.max(snake.cooldown, 0.35);
+  const kb = 120;
+  mouse.x += Math.cos(snake.angle) * kb * 0.12;
+  mouse.y += Math.sin(snake.angle) * kb * 0.12;
+  const d = Math.sqrt(dist2(mouse.x, mouse.y, Camera.x, Camera.y));
+  const v = clamp(1 - d / 1000, 0, 1);
+  Sound.bite(v); Sound.squeak(v);
+  for (let i = 0; i < 8; i++) World.particle(mouse.x, mouse.y, rnd(-80, 80), rnd(-80, 80), 0.6, rnd(1.5, 3), 2);
+  if (mouse.isPlayer) { vibrate([30, 40, 30]); Game.flashMsg('زهر! دنبال یک موش سالم بگرد'); }
+  if (snake.isPlayer) { vibrate(25); Game.flashMsg('زهرزنی — ردش را بگیر'); }
+}
+
+// Snake head touches a mouse: the mass ratio decides everything.
+function snakeBite(snake, mouse) {
+  if (!snake.alive || !mouse.alive || mouse.immune > 0 || snake.immune > 0 || mouse.burrow) return;
+  const r = mouse.mass / snake.mass;
+  if (r <= CONFIG.SWALLOW_RATIO) swallow(snake, mouse);
+  else if (r < CONFIG.VENOM_RATIO) envenomate(snake, mouse);
+  else {
+    // Too big to handle: this is a brawl, and every bite still injects venom.
+    if (mouse.venom <= 0) mouse.venom = 0.01;
+    if (snake.biteCd === undefined || snake.biteCd <= 0) {
+      mouse.venomLayers++; snake.biteCd = 0.9;
+      mouse.hp -= mouse.maxHp * 0.05;
+      Sound.bite(clamp(1 - Math.sqrt(dist2(mouse.x, mouse.y, Camera.x, Camera.y)) / 1000, 0, 1));
+    }
+  }
+}
+
+function eatCorpse(snake, c) {
+  setMass(snake, snake.mass + c.mass);
+  snake.digest = CONFIG.DIGEST_BASE + c.mass / 10;
+  snake.bulges.push({ t: 0, dur: snake.digest, size: Math.sqrt(c.mass) * 1.2 });
+  c.active = false;
+  Sound.gulp(clamp(1 - Math.sqrt(dist2(c.x, c.y, Camera.x, Camera.y)) / 900, 0, 1));
+  if (snake.isPlayer) { vibrate(30); Game.flashMsg('لاشه خورده شد'); }
+}
+
+function eatSnake(big, small) {
+  setMass(big, big.mass + small.mass * 0.75);
+  big.digest = CONFIG.DIGEST_BASE + small.mass / 7;
+  big.bulges.push({ t: 0, dur: big.digest, size: small.r });
+  big.kills++;
+  small.alive = false;
+  Sound.gulp(clamp(1 - Math.sqrt(dist2(small.x, small.y, Camera.x, Camera.y)) / 1000, 0, 1));
+  for (let i = 0; i < 12; i++) World.particle(small.x, small.y, rnd(-90, 90), rnd(-90, 90), 0.7, rnd(2, 4), 2);
+  if (small.isPlayer) Game.onPlayerDeath('یک مار بزرگ‌تر تو را گرفت');
+  if (big.isPlayer) { vibrate(60); Game.flashMsg('مارخواری!'); }
+}
+
+function squeak(e) {
+  if (e.squeakCd > 0) return;
+  e.squeakCd = 3.5;
+  Sound.squeak(clamp(1 - Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y)) / 1200, 0, 1) * 1.2);
+  World.wave(e.x, e.y, 2.2);
+  e.squeakMark = 2.0;          // pure risk/reward: allies hear you — so do snakes
+  for (const o of Game.entities) {
+    if (!o.alive || o === e) continue;
+    if (dist2(o.x, o.y, e.x, e.y) > CONFIG.SQUEAK_RADIUS * CONFIG.SQUEAK_RADIUS) continue;
+    o.heard = { x: e.x, y: e.y, t: 6, who: e };
+  }
+  if (e.isPlayer) vibrate(20);
+}
+
+/* --------------------------- 7. PERCEPTION -------------------------- */
+function sightRange(e) {
+  if (e.kind === 'snake') return World.isNight() ? CONFIG.PIT_ORGAN_RANGE : 640;
+  return World.isNight() ? 300 : 540;             // night shrinks a mouse's world
+}
+// Can `o` actually perceive `t` right now? Bushes hide, stillness hides, heat reveals.
+function canSee(o, t) {
+  const rng = sightRange(o);
+  const d2 = dist2(o.x, o.y, t.x, t.y);
+  if (d2 > rng * rng) return false;
+  if (t.burrow) return false;
+  if (t.inBush) {
+    // Pit organ: at night a snake sees the warm body of a mouse through the leaves.
+    if (o.kind === 'snake' && t.kind === 'mouse' && World.isNight()) return true;
+    return (t.speedNow || 0) > baseSpeed(t) * 0.45;
+  }
+  if (t.kind === 'snake' && t.ambush) return false;   // a coiled snake is simply not there
+  return true;
+}
+// Ground vibration: any fast mover is felt, even through a bush. A still snake is not.
+function feelsVibration(mouse, t) {
+  if (t.burrow) return false;
+  if ((t.speedNow || 0) < baseSpeed(t) * 0.5) return false;
+  return dist2(mouse.x, mouse.y, t.x, t.y) < CONFIG.VIBRATION_RADIUS * CONFIG.VIBRATION_RADIUS;
+}
+
+/* ------------------------------- 8. AI ------------------------------ */
+function aiSnake(e, dt) {
+  e.stateT += dt;
+  if (e.biteCd > 0) e.biteCd -= dt;
+  const near = World.entGrid.query(e.x, e.y, 700, tmpB);
+
+  let threat = null, preyBest = null, preyD = 1e9, threatD = 1e9;
+  for (let i = 0; i < near.length; i++) {
+    const o = near[i];
+    if (o === e || !o.alive) continue;
+    const d2 = dist2(e.x, e.y, o.x, o.y);
+    if (o.kind === 'snake') {
+      if (o.mass >= e.mass * CONFIG.SNAKE_CATCH_RATIO && d2 < 330 * 330 && canSee(e, o)) { if (d2 < threatD) { threat = o; threatD = d2; } }
+      else if (e.mass >= o.mass * CONFIG.SNAKE_CATCH_RATIO && canSee(e, o) && d2 < preyD) { preyBest = o; preyD = d2; }
+    } else {
+      if (o.mass >= e.mass * CONFIG.VENOM_RATIO) {
+        if (d2 < 300 * 300 && canSee(e, o)) { if (d2 < threatD) { threat = o; threatD = d2; } }
+      } else if (canSee(e, o) && d2 < preyD) { preyBest = o; preyD = d2; }
+    }
+  }
+  // A venomed mouse this snake bit is worth following to the end.
+  if (e.prey && (!e.prey.alive || e.prey.venom <= 0)) e.prey = null;
+
+  if (threat && e.strikeT <= 0) { e.state = 'FLEE'; e.stateT = 0; e.threat = threat; }
+  else if (e.digest > 0.4 && e.state !== 'FLEE') e.state = 'DIGEST';
+  else if (e.prey && e.state !== 'STRIKE' && e.strikeT <= 0) e.state = 'PURSUE';
+
+  switch (e.state) {
+    case 'WANDER': {
+      e.throttle = 0.45;
+      if (dist2(e.x, e.y, e.wx, e.wy) < 90 * 90 || e.stateT > 6) pickWander(e, 900);
+      e.desired = Math.atan2(e.wy - e.y, e.wx - e.x);
+      if (preyBest && preyD < 260 * 260 && e.mass < 45) { e.state = 'HUNT'; e.stateT = 0; e.prey = preyBest; }
+      else if (e.stateT > rnd(3, 7)) { e.state = 'SEEK_BUSH'; e.stateT = 0; e.bushTarget = nearestBush(e.x, e.y, 1400); }
+      break;
+    }
+    case 'SEEK_BUSH': {
+      const b = e.bushTarget;
+      if (!b) { e.state = 'WANDER'; e.stateT = 0; break; }
+      e.desired = Math.atan2(b.y - e.y, b.x - e.x);
+      const d2b = dist2(e.x, e.y, b.x, b.y);
+      e.throttle = d2b < (b.r * 0.7) * (b.r * 0.7) ? 0.16 : 0.6;   // slow down, stay quiet
+      if (e.inBush) { e.state = 'AMBUSH'; e.stateT = 0; e.patience = rnd(3, 10); }
+      else if (e.stateT > 12) { e.state = 'WANDER'; e.stateT = 0; }
+      break;
+    }
+    case 'AMBUSH': {
+      e.throttle = 0;                                   // real, patient waiting
+      e.charging = e.coil > 0.4;
+      const reach = 120 + e.coil * 170;
+      if (preyBest && preyD < reach * reach && e.cooldown <= 0 && e.digest <= 0) {
+        e.desired = Math.atan2(preyBest.y - e.y, preyBest.x - e.x);
+        if (Math.abs(angDiff(e.angle, e.desired)) < 0.55) {
+          e.strikeCharge = clamp(e.coil, 0.35, 1);
+          releaseStrike(e); e.state = 'STRIKE'; e.stateT = 0; e.prey = null; e.target = preyBest;
+        }
+      } else if (preyBest) {
+        e.desired = angMove(e.desired, Math.atan2(preyBest.y - e.y, preyBest.x - e.x), dt * 1.2);
+      }
+      if (e.stateT > e.patience) { e.state = 'WANDER'; e.stateT = 0; e.charging = false; pickWander(e, 700); }
+      break;
+    }
+    case 'STRIKE': {
+      e.throttle = 1;
+      if (e.target && e.target.alive) e.desired = Math.atan2(e.target.y - e.y, e.target.x - e.x);
+      if (e.strikeT <= 0) { e.state = e.prey ? 'PURSUE' : 'WANDER'; e.stateT = 0; pickWander(e, 500); }
+      break;
+    }
+    case 'HUNT': {                                     // only small, fast snakes chase
+      const p = e.prey;
+      if (!p || !p.alive || !canSee(e, p) || e.stateT > 6) { e.state = 'WANDER'; e.stateT = 0; e.prey = null; break; }
+      e.desired = Math.atan2(p.y - e.y, p.x - e.x);
+      e.throttle = 1;
+      const d2p = dist2(e.x, e.y, p.x, p.y);
+      if (d2p < 150 * 150 && e.cooldown <= 0 && e.digest <= 0) { e.strikeCharge = 0.8; releaseStrike(e); e.state = 'STRIKE'; e.stateT = 0; e.target = p; }
+      break;
+    }
+    case 'PURSUE': {                                   // follow the envenomated prey
+      const p = e.prey;
+      if (!p || !p.alive) { e.prey = null; e.state = 'WANDER'; e.stateT = 0; break; }
+      e.desired = Math.atan2(p.y - e.y, p.x - e.x);
+      e.throttle = 0.85;
+      const d2p = dist2(e.x, e.y, p.x, p.y);
+      if (d2p < 170 * 170 && e.cooldown <= 0 && e.digest <= 0) { e.strikeCharge = 0.7; releaseStrike(e); e.target = p; }
+      if (e.stateT > 24) { e.prey = null; e.state = 'WANDER'; e.stateT = 0; }
+      break;
+    }
+    case 'DIGEST': {                                   // heavy and vulnerable: hide
+      e.throttle = e.inBush ? 0 : 0.3;
+      if (!e.inBush) {
+        const b = e.bushTarget || nearestBush(e.x, e.y, 900);
+        e.bushTarget = b;
+        if (b) e.desired = Math.atan2(b.y - e.y, b.x - e.x);
+      }
+      if (e.digest <= 0.1) { e.state = 'WANDER'; e.stateT = 0; }
+      break;
+    }
+    case 'FLEE': {
+      const t = e.threat;
+      if (!t || !t.alive || dist2(e.x, e.y, t.x, t.y) > 640 * 640 || e.stateT > 5) { e.state = 'WANDER'; e.stateT = 0; break; }
+      e.desired = Math.atan2(e.y - t.y, e.x - t.x);
+      e.throttle = 1;
+      break;
+    }
+    default: e.state = 'WANDER';
+  }
+  // Careless snakes sometimes break cover for no reason — the world stays alive.
+  if (e.sloppy && Math.random() < dt * 0.05 && e.state === 'AMBUSH') { e.state = 'WANDER'; e.stateT = 0; }
+
+  // Corpses are free mass; vultures above one are visible from far away.
+  if (e.digest <= 0 && e.state !== 'FLEE') {
+    let bestC = null, bd = 520 * 520;
+    for (let i = 0; i < World.corpses.length; i++) {
+      const c = World.corpses[i];
+      if (!c.active) continue;
+      const d2c = dist2(e.x, e.y, c.x, c.y);
+      if (d2c < bd) { bd = d2c; bestC = c; }
+    }
+    if (bestC) { e.desired = Math.atan2(bestC.y - e.y, bestC.x - e.x); e.throttle = 0.8; e.state = e.state === 'AMBUSH' ? e.state : 'WANDER'; }
+  }
+}
+
+function aiMouse(e, dt) {
+  e.stateT += dt;
+  if (e.heard && (e.heard.t -= dt) <= 0) e.heard = null;
+  const near = World.entGrid.query(e.x, e.y, CONFIG.VIBRATION_RADIUS + 80, tmpB);
+
+  let danger = null, dangerD = 1e9, weakSnake = null, weakD = 1e9, hurtAlly = null, allyD = 1e9, healer = null, healerD = 1e9;
+  for (let i = 0; i < near.length; i++) {
+    const o = near[i];
+    if (o === e || !o.alive) continue;
+    const d2 = dist2(e.x, e.y, o.x, o.y);
+    if (o.kind === 'snake') {
+      const perceived = canSee(e, o) || feelsVibration(e, o);
+      if (perceived) {
+        if (e.mass >= o.mass * CONFIG.VENOM_RATIO) { if (d2 < weakD) { weakSnake = o; weakD = d2; } }
+        else if (d2 < dangerD) { danger = o; dangerD = d2; }
+      }
+    } else {
+      if (o.venom > 0 && e.venom <= 0 && d2 < allyD) { hurtAlly = o; allyD = d2; }
+      if (o.venom <= 0 && e.venom > 0 && d2 < healerD) { healer = o; healerD = d2; }
+    }
+  }
+  if (e.heard && e.heard.who && e.heard.who.alive && e.heard.who.venom > 0 && e.venom <= 0) {
+    const d2 = dist2(e.x, e.y, e.heard.x, e.heard.y);
+    if (d2 < allyD) { hurtAlly = e.heard.who; allyD = d2; }
+  }
+
+  if (e.burrow) {                                   // underground: wait out the danger
+    e.throttle = 0;
+    e.state = 'BURROW';
+    if (!danger && e.burrowT < CONFIG.BURROW_SAFE_TIME - 2.2) leaveBurrow(e);
+    return;
+  }
+  if (danger && dangerD < 300 * 300) { if (e.state !== 'ATTACK_SNAKE') { e.state = 'FLEE'; e.threat = danger; e.fear = 1; } }
+  else if (e.venom > 0 && e.state !== 'FLEE') e.state = 'SEEK_HEALER';
+  else if (hurtAlly && e.state !== 'FLEE' && allyD < 700 * 700 && !e.sloppy) { e.state = 'HELP_ALLY'; e.ally = hurtAlly; }
+  else if (weakSnake && weakD < 260 * 260 && Math.random() < 0.6) { e.state = 'ATTACK_SNAKE'; e.threat = weakSnake; }
+
+  switch (e.state) {
+    case 'FORAGE': {
+      if (!e.target || !e.target.active || e.stateT > 5) { e.target = nearestSeed(e.x, e.y, 800); e.stateT = 0; }
+      const s = e.target;
+      if (!s) { e.throttle = 0.5; if (dist2(e.x, e.y, e.wx, e.wy) < 80 * 80) pickWander(e, 700); e.desired = Math.atan2(e.wy - e.y, e.wx - e.x); break; }
+      e.desired = Math.atan2(s.y - e.y, s.x - e.x);
+      const b = World.bushAt(s.x, s.y);
+      if (b && !e.inBush && !e.sloppy && dist2(e.x, e.y, b.x, b.y) < (b.r + 90) * (b.r + 90)) {
+        e.state = 'CAUTION'; e.stateT = 0; e.cautionT = rnd(0.6, 1.6);
+      } else e.throttle = b ? 0.4 : 0.75;            // creep quietly through leaves
+      break;
+    }
+    case 'CAUTION': {                                // stop, sniff, listen for vibrations
+      e.throttle = 0;
+      if (e.stateT > e.cautionT) {
+        if (danger) { e.state = 'FLEE'; e.threat = danger; }
+        else { e.state = 'FORAGE'; e.stateT = 0; if (Math.random() < 0.25) e.target = null; }
+      }
+      break;
+    }
+    case 'FLEE': {
+      const t = e.threat;
+      if (!t || !t.alive || (dist2(e.x, e.y, t.x, t.y) > 480 * 480 && e.stateT > 1.2)) { e.state = 'FORAGE'; e.stateT = 0; e.target = null; break; }
+      const away = Math.atan2(e.y - t.y, e.x - t.x);
+      const bur = nearestBurrow(e.x, e.y, 340);
+      if (bur && e.mass <= CONFIG.BURROW_MAX_MASS) {
+        e.desired = Math.atan2(bur.y - e.y, bur.x - e.x);
+        if (dist2(e.x, e.y, bur.x, bur.y) < 22 * 22) enterBurrow(e, bur);
+      } else e.desired = away;
+      e.throttle = 1;
+      if (e.squeakCd <= 0 && Math.random() < dt * 0.5) squeak(e);
+      break;
+    }
+    case 'SEEK_HEALER': {
+      if (e.venom <= 0) { e.state = 'FORAGE'; e.stateT = 0; break; }
+      if (!healer) {                                 // nobody in sight: call for help
+        if (e.squeakCd <= 0) squeak(e);
+        if (dist2(e.x, e.y, e.wx, e.wy) < 80 * 80) pickWander(e, 600);
+        e.desired = Math.atan2(e.wy - e.y, e.wx - e.x); e.throttle = 0.8; break;
+      }
+      e.desired = Math.atan2(healer.y - e.y, healer.x - e.x);
+      e.throttle = healerD < (CONFIG.HEAL_RADIUS * 0.6) * (CONFIG.HEAL_RADIUS * 0.6) ? 0 : 0.95;
+      break;
+    }
+    case 'HELP_ALLY': {                              // bots really do go heal each other
+      const a = e.ally;
+      if (!a || !a.alive || a.venom <= 0 || e.venom > 0) { e.state = 'FORAGE'; e.stateT = 0; e.ally = null; break; }
+      const d2a = dist2(e.x, e.y, a.x, a.y);
+      e.desired = Math.atan2(a.y - e.y, a.x - e.x);
+      e.throttle = d2a < (CONFIG.HEAL_RADIUS * 0.55) * (CONFIG.HEAL_RADIUS * 0.55) ? 0 : 0.9;
+      if (e.stateT > 22) { e.state = 'FORAGE'; e.stateT = 0; e.ally = null; }
+      break;
+    }
+    case 'ATTACK_SNAKE': {
+      const t = e.threat;
+      if (!t || !t.alive || e.mass < t.mass * CONFIG.VENOM_RATIO || e.stateT > 9) { e.state = 'FORAGE'; e.stateT = 0; break; }
+      e.desired = Math.atan2(t.y - e.y, t.x - e.x);
+      e.throttle = 1;
+      break;
+    }
+    default: e.state = 'FORAGE'; e.stateT = 0;
+  }
+  if (e.venom > 0 && e.squeakCd <= 0 && Math.random() < dt * 0.25) squeak(e);
+}
+
+function pickWander(e, radius) {
+  const a = Math.random() * TAU, d = rnd(radius * 0.3, radius);
+  e.wx = clamp(e.x + Math.cos(a) * d, 80, World.size - 80);
+  e.wy = clamp(e.y + Math.sin(a) * d, 80, World.size - 80);
+  e.stateT = 0;
+}
+function nearestBush(x, y, maxD) {
+  let best = null, bd = maxD * maxD;
+  for (let i = 0; i < World.bushes.length; i++) {
+    const b = World.bushes[i];
+    const d2 = dist2(x, y, b.x, b.y);
+    if (d2 < bd) { bd = d2; best = b; }
+  }
+  return best;
+}
+function nearestSeed(x, y, maxD) {
+  const arr = World.seedGrid.query(x, y, maxD, tmpC);
+  let best = null, bd = maxD * maxD;
+  for (let i = 0; i < arr.length; i++) {
+    const s = arr[i];
+    if (!s.active) continue;
+    const d2 = dist2(x, y, s.x, s.y) * (s.inBush ? 0.55 : 1);   // richer seeds are worth the risk
+    if (d2 < bd) { bd = d2; best = s; }
+  }
+  return best;
+}
+function nearestBurrow(x, y, maxD) {
+  let best = null, bd = maxD * maxD;
+  for (let i = 0; i < World.burrows.length; i++) {
+    const b = World.burrows[i];
+    if (b.occupant) continue;
+    const d2 = dist2(x, y, b.x, b.y);
+    if (d2 < bd) { bd = d2; best = b; }
+  }
+  return best;
+}
+
+/* ----------------------------- 9. CAMERA ---------------------------- */
+const Camera = {
+  x: CONFIG.WORLD_SIZE / 2, y: CONFIG.WORLD_SIZE / 2, zoom: 1, targetZoom: 1, shake: 0,
+  follow(e, dt) {
+    if (!e) return;
+    const k = 1 - Math.pow(0.0015, dt);
+    this.x = lerp(this.x, e.x, k);
+    this.y = lerp(this.y, e.y, k);
+    const base = clamp(1.34 - Math.sqrt(e.mass) * 0.042, 0.55, 1.34);
+    this.targetZoom = base * (e.kind === 'snake' && e.ambush ? 1.12 : 1);
+    this.zoom = lerp(this.zoom, this.targetZoom, 1 - Math.pow(0.02, dt));
+    this.shake = Math.max(0, this.shake - dt * 2.6);
+  },
+  kick(v) { this.shake = Math.min(1.2, this.shake + v); }
+};
+
+/* ------------------------------ 10. GAME ---------------------------- */
+const Game = {
+  entities: [], player: null, state: 'menu', frame: 0, runTime: 0,
+  lastStats: null, hintT: 0, hintIdx: 0,
+
+  start() {
+    World.generate();
+    this.entities.length = 0;
+    this.frame = 0;
+    for (let i = 0; i < CONFIG.BOT_COUNT; i++) this.spawnBot(Math.random() < CONFIG.SNAKE_BOT_SHARE);
+    this.spawnPlayer();
+  },
+
+  spawnBot(isSnake) {
+    const p = this.findSpawnPoint(CONFIG.START_MASS);
+    const mass = CONFIG.START_MASS * rnd(0.7, isSnake ? 3.4 : 2.6);
+    const e = isSnake ? makeSnake(p.x, p.y, mass, false) : makeMouse(p.x, p.y, mass, false);
+    e.immune = 1.2;
+    this.entities.push(e);
+    return e;
+  },
+
+  spawnPlayer() {
+    // Each life the player is randomly a snake or a mouse — 50/50.
+    const isSnake = Math.random() < 0.5;
+    const p = this.findSpawnPoint(CONFIG.START_MASS, true);
+    const e = isSnake ? makeSnake(p.x, p.y, CONFIG.START_MASS, true) : makeMouse(p.x, p.y, CONFIG.START_MASS, true);
+    e.immune = CONFIG.SPAWN_IMMUNITY;
+    this.player = e;
+    this.entities.push(e);
+    this.runTime = 0; this.hintT = 0; this.hintIdx = 0;
+    Camera.x = e.x; Camera.y = e.y; Camera.zoom = 1;
+    UI.showSpawnCard(isSnake);
+  },
+
+  // Never drop the player next to something that can eat them.
+  findSpawnPoint(mass, safe) {
+    for (let t = 0; t < 80; t++) {
+      const x = rnd(200, World.size - 200), y = rnd(200, World.size - 200);
+      let ok = true;
+      for (let i = 0; i < this.entities.length; i++) {
+        const o = this.entities[i];
+        if (!o.alive) continue;
+        const d = safe ? 900 : 520;
+        if (dist2(x, y, o.x, o.y) < d * d && o.mass > mass * 1.2) { ok = false; break; }
+      }
+      if (ok) return { x, y };
+    }
+    return { x: rnd(200, World.size - 200), y: rnd(200, World.size - 200) };
+  },
+
+  step(dt) {
+    World.update(dt);
+    Sound.setNight(1 - World.dayFactor());
+    this.runTime += dt;
+    this.frame++;
+
+    // Rebuild the entity hash once per step (cheap, no allocation).
+    World.entGrid.clear();
+    for (let i = 0; i < this.entities.length; i++) {
+      const e = this.entities[i];
+      if (e.alive) World.entGrid.insert(e);
+    }
+
+    for (let i = 0; i < this.entities.length; i++) {
+      const e = this.entities[i];
+      if (!e.alive) continue;
+      if (e.squeakMark > 0) e.squeakMark -= dt;
+      if (!e.isPlayer) {
+        // Far-away bots think at a quarter rate — same behaviour, a quarter of the cost.
+        const far = dist2(e.x, e.y, Camera.x, Camera.y) > 1500 * 1500;
+        if (!far || ((this.frame + e.tickOff) & 3) === 0) {
+          const adt = far ? dt * 4 : dt;
+          if (e.kind === 'snake') aiSnake(e, adt); else aiMouse(e, adt);
+        }
+      }
+      if (e.kind === 'snake') updateSnake(e, dt); else updateMouse(e, dt);
+    }
+
+    this.interactions(dt);
+    this.healing(dt);
+    this.cleanup();
+    Camera.follow(this.player && this.player.alive ? this.player : null, dt);
+    UI.updateHints(dt);
+  },
+
+  interactions(dt) {
+    const ents = this.entities;
+    for (let i = 0; i < ents.length; i++) {
+      const e = ents[i];
+      if (!e.alive) continue;
+
+      if (e.kind === 'mouse') {
+        if (e.burrow) continue;
+        // Seeds: the only food, and it grows exactly where snakes wait.
+        const seeds = World.seedGrid.query(e.x, e.y, e.r + 26, tmpA);
+        for (let k = 0; k < seeds.length; k++) {
+          const s = seeds[k];
+          if (!s.active) continue;
+          if (dist2(e.x, e.y, s.x, s.y) < (e.r + 10) * (e.r + 10)) {
+            s.active = false;
+            setMass(e, e.mass + (s.inBush ? CONFIG.SEED_VALUE_IN_BUSH : CONFIG.SEED_VALUE));
+            e.seedsEaten++;
+            if (e.isPlayer) { Sound.tone(0.07, 0.09, 'triangle', 700, 980); vibrate(8); }
+          }
+        }
+        continue;
+      }
+
+      // --- Snake head interactions ---
+      if (e.biteCd > 0) e.biteCd -= dt;
+      const reach = e.r + 8;
+      const cand = World.entGrid.query(e.x, e.y, reach + 40, tmpA);
+      for (let k = 0; k < cand.length; k++) {
+        const o = cand[k];
+        if (o === e || !o.alive) continue;
+        const rr = reach + o.r;
+        if (dist2(e.x, e.y, o.x, o.y) > rr * rr) continue;
+        if (o.kind === 'mouse') {
+          if (o.mass >= e.mass * CONFIG.VENOM_RATIO) { melee(e, o, dt); snakeBite(e, o); }
+          else snakeBite(e, o);
+        } else {
+          // Snake vs snake: no collision death ever. Only a real strike catches one.
+          if (e.strikeT > 0 && e.mass >= o.mass * CONFIG.SNAKE_CATCH_RATIO && o.immune <= 0 && e.immune <= 0) eatSnake(e, o);
+        }
+      }
+      // Corpses are fair game for any snake.
+      for (let k = 0; k < World.corpses.length; k++) {
+        const c = World.corpses[k];
+        if (!c.active) continue;
+        if (dist2(e.x, e.y, c.x, c.y) < (reach + 14) * (reach + 14)) { eatCorpse(e, c); break; }
+      }
+    }
+  },
+
+  healing(dt) {
+    const ents = this.entities;
+    for (let i = 0; i < ents.length; i++) {
+      const m = ents[i];
+      if (!m.alive || m.kind !== 'mouse' || m.venom <= 0) continue;
+      let helper = null, hd = CONFIG.HEAL_RADIUS * CONFIG.HEAL_RADIUS;
+      const near = World.entGrid.query(m.x, m.y, CONFIG.HEAL_RADIUS + 20, tmpA);
+      for (let k = 0; k < near.length; k++) {
+        const o = near[k];
+        if (o === m || !o.alive || o.kind !== 'mouse' || o.venom > 0 || o.burrow) continue;
+        const d2 = dist2(m.x, m.y, o.x, o.y);
+        if (d2 < hd) { hd = d2; helper = o; }
+      }
+      m.healPartner = helper;
+      if (helper) {
+        helper.helper = true;                       // the helper pays with 25% of its speed
+        m.healBreak = 0;
+        m.healProg += dt;
+        if (Math.random() < dt * 12) World.particle(lerp(m.x, helper.x, Math.random()), lerp(m.y, helper.y, Math.random()), rnd(-8, 8), rnd(-20, -4), 0.7, rnd(1.5, 3), 3);
+        if (m.healProg >= CONFIG.HEAL_TIME) {
+          m.venom = 0; m.venomLayers = 0; m.healProg = 0;
+          setMass(m, m.mass + 2); setMass(helper, helper.mass + 2);
+          m.flash = 1; helper.flash = 1;
+          const v = clamp(1 - Math.sqrt(dist2(m.x, m.y, Camera.x, Camera.y)) / 900, 0, 1);
+          Sound.heal(v);
+          for (let q = 0; q < 16; q++) World.particle(m.x, m.y, rnd(-90, 90), rnd(-90, 90), 0.8, rnd(2, 4), 3);
+          if (m.isPlayer || helper.isPlayer) { vibrate([20, 30, 20]); Game.flashMsg('درمان شد!'); }
+        }
+      } else {
+        m.healBreak += dt;
+        if (m.healBreak > 0.4) m.healProg = 0;      // healing must be continuous
+      }
+    }
+  },
+
+  cleanup() {
+    const ents = this.entities;
+    let snakes = 0, mice = 0, bots = 0;
+    for (let i = ents.length - 1; i >= 0; i--) {
+      const e = ents[i];
+      if (e.alive) {
+        if (!e.isPlayer) { bots++; if (e.kind === 'snake') snakes++; else mice++; }
+        continue;
+      }
+      if (e.burrow) { e.burrow.occupant = null; e.burrow = null; }
+      if (e === this.player) continue;              // the dead player stays until "again"
+      ents.splice(i, 1);
+    }
+    while (bots < CONFIG.BOT_COUNT) {               // keep the arena populated
+      const wantSnake = snakes / Math.max(1, snakes + mice) < CONFIG.SNAKE_BOT_SHARE;
+      this.spawnBot(wantSnake);
+      if (wantSnake) snakes++; else mice++;
+      bots++;
+    }
+  },
+
+  rank(e) {
+    let better = 1;
+    for (const o of this.entities) if (o.alive && o !== e && o.mass > e.mass) better++;
+    return better;
+  },
+  aliveCount() { let n = 0; for (const o of this.entities) if (o.alive) n++; return n; },
+
+  onPlayerDeath(cause) {
+    const p = this.player;
+    Camera.kick(0.9);
+    this.lastStats = {
+      mass: Math.round(p.maxMass), kills: p.kills,
+      time: Math.round(this.runTime), rank: this.rank(p), cause: cause || '', kind: p.kind
+    };
+    setTimeout(() => { if (Game.state === 'playing') { Game.state = 'dead'; UI.showDeath(); } }, 850);
+  },
+
+  flashMsg(t) { UI.toast(t); }
+};
+
+// Melee: a mouse 2.5x heavier than the snake can genuinely win — bitterly.
+function melee(snake, mouse, dt) {
+  if (snake.immune > 0 || mouse.immune > 0) return;
+  snake.hp -= mouse.mass * CONFIG.MELEE_DPS * dt;
+  mouse.hp -= snake.mass * CONFIG.MELEE_DPS * dt;
+  if (Math.random() < dt * 22) {
+    World.particle(lerp(snake.x, mouse.x, 0.5), lerp(snake.y, mouse.y, 0.5), rnd(-120, 120), rnd(-120, 120), 0.6, rnd(2, 4), 2);
+    World.particle(lerp(snake.x, mouse.x, 0.5), lerp(snake.y, mouse.y, 0.5), rnd(-90, 90), rnd(-90, 90), 0.8, rnd(1.5, 3), 4);
+  }
+  if (snake.isPlayer || mouse.isPlayer) { Camera.kick(dt * 2.2); if (Math.random() < dt * 5) vibrate(12); }
+  if (snake.hp <= 0) {
+    killEntity(snake, mouse, 'یک موش بزرگ تو را کشت');
+    setMass(mouse, mouse.mass + snake.mass * 0.5);
+    if (mouse.isPlayer) Game.flashMsg(mouse.venom > 0 ? 'مار مُرد — ولی تو هنوز مسمومی' : 'مار مُرد!');
+  }
+  if (mouse.hp <= 0) {
+    killEntity(mouse, snake, 'در درگیری کشته شدی');
+    if (snake.alive) setMass(snake, snake.mass + mouse.mass * 0.35);
+  }
+}
+
+function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+
+/* ---------------------------- 11. RENDERER -------------------------- */
+const R = {
+  canvas: null, ctx: null, w: 0, h: 0, dpr: 1,
+  sandTile: null, sandPat: null, miniBase: null, miniSize: 210,
+  viewL: 0, viewR: 0, viewT: 0, viewB: 0,
+
+  init() {
+    this.canvas = document.getElementById('game');
+    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this.buildSand();
+  },
+  resize() {
+    this.dpr = Math.min(2, window.devicePixelRatio || 1);   // capped for performance
+    this.w = window.innerWidth; this.h = window.innerHeight;
+    this.canvas.width = Math.round(this.w * this.dpr);
+    this.canvas.height = Math.round(this.h * this.dpr);
+    this.canvas.style.width = this.w + 'px';
+    this.canvas.style.height = this.h + 'px';
+  },
+
+  // Procedural sand texture baked once into an offscreen tile.
+  buildSand() {
+    const s = 256, c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const x = c.getContext('2d');
+    const img = x.createImageData(s, s);
+    // Bilinear wrap-blend makes the value noise perfectly seamless: no tile seams.
+    const tileNoise = (i, j, f) => {
+      const u = i / s, v = j / s;
+      return vnoise(i / f, j / f) * (1 - u) * (1 - v) + vnoise((i - s) / f, j / f) * u * (1 - v)
+           + vnoise(i / f, (j - s) / f) * (1 - u) * v + vnoise((i - s) / f, (j - s) / f) * u * v;
+    };
+    for (let j = 0; j < s; j++) {
+      for (let i = 0; i < s; i++) {
+        const n = tileNoise(i, j, 30) * 0.55 + tileNoise(i, j, 9) * 0.32 + Math.random() * 0.13;
+        const k = (j * s + i) * 4;
+        img.data[k] = 196 + n * 44;
+        img.data[k + 1] = 168 + n * 40;
+        img.data[k + 2] = 120 + n * 36;
+        img.data[k + 3] = 255;
+      }
+    }
+    x.putImageData(img, 0, 0);
+    this.sandTile = c;
+    this.sandPat = this.ctx.createPattern(c, 'repeat');
+  },
+
+  buildMinimap() {
+    const s = 256, c = document.createElement('canvas');
+    c.width = s; c.height = s;
+    const x = c.getContext('2d');
+    x.fillStyle = 'rgba(60,48,28,0.95)';
+    x.fillRect(0, 0, s, s);
+    const k = s / World.size;
+    x.fillStyle = 'rgba(52,78,40,0.95)';
+    for (const b of World.bushes) {
+      x.beginPath(); x.arc(b.x * k, b.y * k, Math.max(1.2, b.r * k), 0, TAU); x.fill();
+    }
+    this.miniBase = c;
+  },
+
+  frame(alpha) {
+    const ctx = this.ctx;
+    const day = World.dayFactor();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.fillStyle = '#1a140c';
+    ctx.fillRect(0, 0, this.w, this.h);
+
+    const z = Camera.zoom;
+    let sx = 0, sy = 0;
+    if (Camera.shake > 0.001) { sx = rnd(-1, 1) * Camera.shake * 14; sy = rnd(-1, 1) * Camera.shake * 14; }
+    ctx.save();
+    ctx.translate(this.w / 2 + sx, this.h / 2 + sy);
+    ctx.scale(z, z);
+    ctx.translate(-Camera.x, -Camera.y);
+
+    const hw = this.w / (2 * z) + 80, hh = this.h / (2 * z) + 80;
+    this.viewL = Camera.x - hw; this.viewR = Camera.x + hw;
+    this.viewT = Camera.y - hh; this.viewB = Camera.y + hh;
+
+    this.drawGround(ctx, day);
+    this.drawProps(ctx);
+    this.drawTrails(ctx);
+    this.drawBurrows(ctx);
+    this.drawSeeds(ctx);
+    this.drawCorpses(ctx);
+    this.drawWaves(ctx);
+    this.drawEntities(ctx, day);
+    this.drawBushes(ctx, day);
+    this.drawPlayerOverBush(ctx, day);
+    this.drawParticles(ctx);
+    this.drawHealLinks(ctx);
+    ctx.restore();
+
+    this.drawNight(ctx, day);
+    this.drawHUD(ctx);
+  },
+
+  inView(x, y, r) { return x + r > this.viewL && x - r < this.viewR && y + r > this.viewT && y - r < this.viewB; },
+
+  drawGround(ctx, day) {
+    ctx.fillStyle = this.sandPat;
+    ctx.fillRect(this.viewL, this.viewT, this.viewR - this.viewL, this.viewB - this.viewT);
+    // Warm daylight / cold moonlight wash straight over the sand.
+    ctx.fillStyle = day > 0.5
+      ? 'rgba(255,214,140,' + (0.10 * day).toFixed(3) + ')'
+      : 'rgba(40,58,120,' + (0.26 * (1 - day)).toFixed(3) + ')';
+    ctx.fillRect(this.viewL, this.viewT, this.viewR - this.viewL, this.viewB - this.viewT);
+    // Impassable rocky border of the closed map.
+    const S = World.size;
+    ctx.fillStyle = '#4a3c28';
+    if (this.viewL < 34) ctx.fillRect(this.viewL, this.viewT, 34 - this.viewL, this.viewB - this.viewT);
+    if (this.viewR > S - 34) ctx.fillRect(S - 34, this.viewT, this.viewR - (S - 34), this.viewB - this.viewT);
+    if (this.viewT < 34) ctx.fillRect(this.viewL, this.viewT, this.viewR - this.viewL, 34 - this.viewT);
+    if (this.viewB > S - 34) ctx.fillRect(this.viewL, S - 34, this.viewR - this.viewL, this.viewB - (S - 34));
+  },
+
+  drawProps(ctx) {
+    const P = World.props;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      if (!this.inView(p.x, p.y, p.r + 10)) continue;
+      if (p.kind === 0) {                    // rock
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.beginPath(); ctx.ellipse(p.x + p.r * 0.3, p.y + p.r * 0.35, p.r, p.r * 0.7, p.a, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#8e8069';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.78, p.a, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,240,210,0.22)';
+        ctx.beginPath(); ctx.ellipse(p.x - p.r * 0.25, p.y - p.r * 0.28, p.r * 0.5, p.r * 0.34, p.a, 0, TAU); ctx.fill();
+      } else if (p.kind === 1) {             // cracked dirt patch
+        ctx.fillStyle = 'rgba(120,96,62,0.30)';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.72, p.a, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(70,52,30,0.35)'; ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const a = p.a + k * 2.1;
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + Math.cos(a) * p.r * 0.9, p.y + Math.sin(a) * p.r * 0.65);
+        }
+        ctx.stroke();
+      } else {                               // dry bones
+        ctx.strokeStyle = 'rgba(232,222,196,0.8)'; ctx.lineCap = 'round';
+        ctx.lineWidth = Math.max(2, p.r * 0.22);
+        ctx.beginPath();
+        ctx.moveTo(p.x - Math.cos(p.a) * p.r, p.y - Math.sin(p.a) * p.r);
+        ctx.lineTo(p.x + Math.cos(p.a) * p.r, p.y + Math.sin(p.a) * p.r);
+        ctx.stroke();
+        ctx.lineWidth = Math.max(1.4, p.r * 0.16);
+        ctx.beginPath();
+        ctx.moveTo(p.x - Math.cos(p.a + 1) * p.r * 0.6, p.y - Math.sin(p.a + 1) * p.r * 0.6);
+        ctx.lineTo(p.x + Math.cos(p.a + 1) * p.r * 0.5, p.y + Math.sin(p.a + 1) * p.r * 0.5);
+        ctx.stroke();
+      }
+    }
+  },
+
+  drawTrails(ctx) {
+    const T = World.trails;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < T.length; i++) {
+      const t = T[i];
+      if (!t.active || !this.inView(t.x, t.y, 40)) continue;
+      const a = clamp(t.life / 6, 0, 1) * 0.20;
+      ctx.strokeStyle = 'rgba(96,74,44,' + a.toFixed(3) + ')';
+      ctx.lineWidth = t.w;
+      ctx.beginPath();
+      ctx.moveTo(t.x - Math.cos(t.a) * t.w, t.y - Math.sin(t.a) * t.w);
+      ctx.lineTo(t.x + Math.cos(t.a) * t.w, t.y + Math.sin(t.a) * t.w);
+      ctx.stroke();
+    }
+  },
+
+  drawBurrows(ctx) {
+    for (let i = 0; i < World.burrows.length; i++) {
+      const b = World.burrows[i];
+      if (!this.inView(b.x, b.y, 30)) continue;
+      ctx.fillStyle = '#6b5535';
+      ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r + 6, b.r * 0.8 + 5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#14100a';
+      ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r, b.r * 0.72, 0, 0, TAU); ctx.fill();
+      if (b.occupant) {
+        ctx.strokeStyle = 'rgba(180,220,150,0.55)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(b.x, b.y, b.r + 8, b.r * 0.8 + 7, 0, 0, TAU); ctx.stroke();
+      }
+    }
+  },
+
+  drawSeeds(ctx) {
+    const S = World.seeds;
+    for (let i = 0; i < S.length; i++) {
+      const s = S[i];
+      if (!s.active || !this.inView(s.x, s.y, 10)) continue;
+      const r = s.inBush ? 4.2 : 3.1;
+      ctx.fillStyle = s.inBush ? '#f0d88a' : '#cbb075';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, r, r * 0.72, s.g, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(90,64,28,0.55)';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, r * 0.42, r * 0.22, s.g, 0, TAU); ctx.fill();
+    }
+  },
+
+  drawCorpses(ctx) {
+    const C = World.corpses, t = World.time;
+    for (let i = 0; i < C.length; i++) {
+      const c = C[i];
+      if (!c.active || !this.inView(c.x, c.y, 90)) continue;
+      const a = clamp(c.life / 4, 0, 1);
+      const r = 6 + Math.sqrt(c.mass) * 1.2;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(110,26,20,0.5)';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, r * 1.7, r * 1.2, c.a, 0, TAU); ctx.fill();
+      ctx.fillStyle = c.type === 1 ? '#6d5a34' : '#8a7256';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, r, r * 0.62, c.a, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(235,225,200,0.75)'; ctx.lineWidth = 1.6;
+      for (let k = 0; k < 3; k++) {
+        const ang = c.a + k * 1.4;
+        ctx.beginPath();
+        ctx.moveTo(c.x, c.y);
+        ctx.lineTo(c.x + Math.cos(ang) * r * 1.3, c.y + Math.sin(ang) * r * 0.9);
+        ctx.stroke();
+      }
+      // Circling vultures: a long-distance signal that something died here.
+      ctx.fillStyle = 'rgba(20,16,10,0.55)';
+      for (let k = 0; k < 3; k++) {
+        const ang = t * 0.9 + k * 2.09;
+        const vx = c.x + Math.cos(ang) * 46, vy = c.y + Math.sin(ang) * 30;
+        ctx.beginPath();
+        ctx.moveTo(vx - 7, vy);
+        ctx.quadraticCurveTo(vx, vy - 5, vx + 7, vy);
+        ctx.quadraticCurveTo(vx, vy + 2, vx - 7, vy);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  },
+
+  drawWaves(ctx) {
+    // Vibration rings — only meaningful (and only drawn) for a mouse player.
+    const p = Game.player;
+    if (!p || !p.alive || p.kind !== 'mouse') return;
+    const W = World.waves;
+    for (let i = 0; i < W.length; i++) {
+      const w = W[i];
+      if (!w.active) continue;
+      if (dist2(w.x, w.y, p.x, p.y) > CONFIG.VIBRATION_RADIUS * CONFIG.VIBRATION_RADIUS) continue;
+      ctx.strokeStyle = 'rgba(255,236,190,' + (0.30 * w.life * clamp(w.strong, 0.4, 1.6)).toFixed(3) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+    }
+  },
+
+  drawParticles(ctx) {
+    const P = World.particles;
+    for (let i = 0; i < P.length; i++) {
+      const p = P[i];
+      if (!p.active || !this.inView(p.x, p.y, 20)) continue;
+      const a = clamp(p.life / p.max, 0, 1);
+      if (p.kind === 0) ctx.fillStyle = 'rgba(214,186,132,' + (a * 0.8).toFixed(3) + ')';
+      else if (p.kind === 1) ctx.fillStyle = 'rgba(86,120,60,' + (a * 0.85).toFixed(3) + ')';
+      else if (p.kind === 2) ctx.fillStyle = 'rgba(150,26,20,' + (a * 0.85).toFixed(3) + ')';
+      else if (p.kind === 3) ctx.fillStyle = 'rgba(150,240,190,' + (a * 0.9).toFixed(3) + ')';
+      else ctx.fillStyle = 'rgba(220,200,170,' + (a * 0.8).toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.5 + a * 0.7), 0, TAU); ctx.fill();
+    }
+    // Leaf-shake markers, visible from outside the bush.
+    const Rs = World.rustles;
+    for (let i = 0; i < Rs.length; i++) {
+      const r = Rs[i];
+      if (!r.active || !this.inView(r.x, r.y, 40)) continue;
+      const a = clamp(r.life / 0.8, 0, 1);
+      ctx.strokeStyle = 'rgba(226,244,190,' + (a * 0.55).toFixed(3) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 10 + (1 - a) * 22, 0, TAU); ctx.stroke();
+    }
+  },
+
+  drawBushes(ctx, day) {
+    // Bushes are drawn ON TOP of creatures: whatever is inside is genuinely hidden.
+    const B = World.bushes, t = World.time;
+    for (let i = 0; i < B.length; i++) {
+      const b = B[i];
+      if (!this.inView(b.x, b.y, b.r + 30)) continue;
+      const shake = b.shake;
+      ctx.fillStyle = 'rgba(24,18,10,0.22)';
+      ctx.beginPath(); ctx.ellipse(b.x + 8, b.y + 10, b.r * 0.92, b.r * 0.72, 0, 0, TAU); ctx.fill();
+      for (let k = 0; k < b.blobs.length; k++) {
+        const o = b.blobs[k];
+        // Perlin-ish wind sway, so a real rustle is hard to tell from the breeze.
+        const w = (vnoise((b.x + o.dx) * 0.004 + t * 0.35, (b.y + o.dy) * 0.004) - 0.5) * 8;
+        const sh = shake > 0 ? Math.sin(t * 30 + o.ph) * shake * 7 : 0;
+        // Dry khaki-olive foliage, some blobs almost dead brown.
+        const li = 0.5 + 0.5 * day;
+        const rr = 94 + o.tone * 74, gg = 98 + o.tone * 30, bb = 46 + o.tone * 26;
+        ctx.fillStyle = 'rgba(' + ((rr * li) | 0) + ',' + ((gg * li) | 0) + ',' + ((bb * li) | 0) + ',0.88)';
+        ctx.beginPath();
+        ctx.ellipse(b.x + o.dx + w + sh, b.y + o.dy + w * 0.6, o.r, o.r * 0.62, o.a + w * 0.02, 0, TAU);
+        ctx.fill();
+      }
+      // Dry twigs for texture.
+      ctx.strokeStyle = 'rgba(60,48,24,0.5)'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let k = 0; k < b.blobs.length; k += 3) {
+        const o = b.blobs[k];
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x + o.dx * 1.06, b.y + o.dy * 1.06);
+      }
+      ctx.stroke();
+    }
+  },
+
+  // Redraw the player on top of the leaves they are hiding in.
+  drawPlayerOverBush(ctx, day) {
+    const p = Game.player;
+    if (!p || !p.alive || !p.inBush || p.burrow) return;
+    this.overdraw = true;
+    if (p.kind === 'snake') this.drawSnake(ctx, p, day); else this.drawMouse(ctx, p, day);
+    this.overdraw = false;
+  },
+
+  drawHealLinks(ctx) {
+    for (const m of Game.entities) {
+      if (!m.alive || m.kind !== 'mouse' || m.venom <= 0) continue;
+      if (!this.inView(m.x, m.y, CONFIG.HEAL_RADIUS + 40)) continue;
+      const prog = clamp(m.healProg / CONFIG.HEAL_TIME, 0, 1);
+      ctx.strokeStyle = m.healPartner ? 'rgba(140,240,190,0.5)' : 'rgba(160,220,255,0.18)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 10]);
+      ctx.beginPath(); ctx.arc(m.x, m.y, CONFIG.HEAL_RADIUS, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      if (prog > 0) {
+        ctx.strokeStyle = 'rgba(150,255,200,0.95)'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(m.x, m.y, CONFIG.HEAL_RADIUS * 0.55, -Math.PI / 2, -Math.PI / 2 + TAU * prog); ctx.stroke();
+      }
+    }
+  },
+
+  drawEntities(ctx, day) {
+    const E = Game.entities;
+    for (let i = 0; i < E.length; i++) {
+      const e = E[i];
+      if (!e.alive || e.burrow) continue;
+      if (!this.inView(e.x, e.y, e.kind === 'snake' ? e.r * 8 + 120 : e.r + 60)) continue;
+      if (e.kind === 'snake') this.drawSnake(ctx, e, day); else this.drawMouse(ctx, e, day);
+    }
+  },
+
+  drawSnake(ctx, e, day) {
+    const segs = e.segs, n = segs.length;
+    const amp = e.waveAmp || 0;
+    // Build the render path with the sinusoidal crawl wave applied.
+    const pts = SNAKE_PTS;
+    for (let i = 0; i < n; i++) {
+      const s = segs[i];
+      const prev = segs[Math.max(0, i - 1)], next = segs[Math.min(n - 1, i + 1)];
+      let tx = next.x - prev.x, ty = next.y - prev.y;
+      const d = Math.hypot(tx, ty) || 1;
+      const nx = -ty / d, ny = tx / d;
+      const k = Math.sin(e.wave - i * 0.42) * amp * (i / n) * (1 - i / (n * 2.4));
+      pts[i * 2] = s.x + nx * k;
+      pts[i * 2 + 1] = s.y + ny * k;
+    }
+    const dim = e.ambush && !e.isPlayer ? 0 : 1;
+    if (dim === 0) return;                           // an ambushing bot is invisible
+
+    // Inside a bush a creature is only half-seen; the player gets a faint
+    // silhouette redrawn over the leaves so they can still read their own body.
+    const ghost = this.overdraw ? 0.72 : (e.inBush ? 0.55 : 1);
+    ctx.globalAlpha = ghost * (e.immune > 0 ? 0.62 : 1);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    // Per-point body radius and normals: thick through the middle, fine tail.
+    const nrm = SNAKE_NRM, rad = SNAKE_RAD;
+    for (let i = 0; i < n; i++) {
+      const px = pts[Math.max(0, i - 1) * 2], py = pts[Math.max(0, i - 1) * 2 + 1];
+      const qx = pts[Math.min(n - 1, i + 1) * 2], qy = pts[Math.min(n - 1, i + 1) * 2 + 1];
+      let tx = qx - px, ty = qy - py;
+      const d = Math.hypot(tx, ty) || 1;
+      nrm[i * 2] = -ty / d; nrm[i * 2 + 1] = tx / d;
+      const t = i / (n - 1);
+      // A bulge from a swallowed animal makes the body swell locally.
+      let swell = 0;
+      for (let k = 0; k < e.bulges.length; k++) {
+        const b = e.bulges[k];
+        const bi = b.t * (n - 1);
+        const dd = Math.abs(i - bi);
+        if (dd < 3) swell = Math.max(swell, b.size * 0.8 * (1 - dd / 3) * Math.sin(Math.PI * clamp(b.t * 1.05, 0, 1)));
+      }
+      rad[i] = (t < 0.10 ? e.r * (0.86 + (t / 0.10) * 0.14)
+                         : e.r * (1 - Math.pow((t - 0.10) / 0.90, 1.6) * 0.84)) + swell;
+    }
+    const outline = (scale, dx, dy) => {
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const w = rad[i] * scale;
+        const x = pts[i * 2] + nrm[i * 2] * w + dx, y = pts[i * 2 + 1] + nrm[i * 2 + 1] * w + dy;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        const w = rad[i] * scale;
+        ctx.lineTo(pts[i * 2] - nrm[i * 2] * w + dx, pts[i * 2 + 1] - nrm[i * 2 + 1] * w + dy);
+      }
+      ctx.closePath();
+    };
+
+    const lit = 0.55 + 0.45 * day;
+    ctx.fillStyle = 'rgba(20,14,6,0.28)';           // soft shadow on the sand
+    outline(1, 5, 7); ctx.fill();
+
+    ctx.fillStyle = e.isPlayer
+      ? 'rgb(' + ((152 * lit) | 0) + ',' + ((128 * lit) | 0) + ',' + ((60 * lit) | 0) + ')'
+      : 'rgb(' + ((126 * lit) | 0) + ',' + ((106 * lit) | 0) + ',' + ((56 * lit) | 0) + ')';
+    outline(1, 0, 0); ctx.fill();
+    ctx.strokeStyle = 'rgba(48,36,16,' + (0.55 * lit).toFixed(3) + ')';
+    ctx.lineWidth = 1.4; ctx.stroke();
+
+    ctx.fillStyle = 'rgba(228,208,160,' + (0.42 * lit).toFixed(3) + ')';   // pale belly
+    outline(0.40, 0, 0); ctx.fill();
+
+    // Diamond skin pattern (LOD: coarser for thin bodies and distant snakes).
+    const step = e.r > 6 ? 2 : 3;
+    ctx.fillStyle = 'rgba(58,45,20,' + (0.62 * lit).toFixed(3) + ')';
+    for (let i = 1; i < n - 1; i += step) {
+      const x = pts[i * 2], y = pts[i * 2 + 1];
+      const a = Math.atan2(nrm[i * 2 + 1], nrm[i * 2]) + Math.PI / 2;
+      const w = rad[i] * (0.70 - 0.28 * Math.abs(Math.sin(i * 0.8)));
+      ctx.beginPath(); ctx.ellipse(x, y, w, rad[i] * 0.44, a, 0, TAU); ctx.fill();
+    }
+
+    // --- Head ---
+    const hx = pts[0], hy = pts[1], a = e.angle;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const hr = e.r * 1.22;
+    ctx.save();
+    ctx.translate(hx, hy); ctx.rotate(a);
+    ctx.fillStyle = 'rgba(20,14,6,0.28)';
+    ctx.beginPath(); ctx.ellipse(4, 6, hr * 1.25, hr * 0.9, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = e.isPlayer ? 'rgb(' + ((162 * lit) | 0) + ',' + ((136 * lit) | 0) + ',' + ((64 * lit) | 0) + ')'
+                               : 'rgb(' + ((134 * lit) | 0) + ',' + ((112 * lit) | 0) + ',' + ((58 * lit) | 0) + ')';
+    ctx.beginPath();                                  // triangular viper head
+    ctx.moveTo(hr * 1.5, 0);
+    ctx.quadraticCurveTo(hr * 0.5, -hr * 1.05, -hr * 0.9, -hr * 0.72);
+    ctx.lineTo(-hr * 0.9, hr * 0.72);
+    ctx.quadraticCurveTo(hr * 0.5, hr * 1.05, hr * 1.5, 0);
+    ctx.fill();
+    // Vertical-slit eyes.
+    ctx.fillStyle = '#f2d46a';
+    ctx.beginPath(); ctx.ellipse(hr * 0.25, -hr * 0.6, hr * 0.30, hr * 0.26, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.25, hr * 0.6, hr * 0.30, hr * 0.26, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#160f05';
+    ctx.beginPath(); ctx.ellipse(hr * 0.28, -hr * 0.6, hr * 0.09, hr * 0.22, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hr * 0.28, hr * 0.6, hr * 0.09, hr * 0.22, 0, 0, TAU); ctx.fill();
+    // Forked tongue.
+    if (e.tongueOut > 0) {
+      const t = e.tongueOut / 0.45, L = hr * (1.4 + t * 1.5);
+      ctx.strokeStyle = '#d0384e'; ctx.lineWidth = Math.max(1.2, hr * 0.13); ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hr * 1.4, 0); ctx.lineTo(hr * 1.4 + L * 0.6, 0);
+      ctx.moveTo(hr * 1.4 + L * 0.6, 0); ctx.lineTo(hr * 1.4 + L, -L * 0.35);
+      ctx.moveTo(hr * 1.4 + L * 0.6, 0); ctx.lineTo(hr * 1.4 + L, L * 0.35);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Player-only feedback: ambush shimmer and charge ring.
+    if (e.isPlayer) {
+      if (e.ambush) {
+        ctx.strokeStyle = 'rgba(160,230,255,' + (0.18 + 0.16 * e.coil).toFixed(3) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(hx, hy, hr * 2.4 + e.coil * 10, 0, TAU); ctx.stroke();
+      }
+      if (e.charging && e.strikeCharge > 0.02) {
+        ctx.strokeStyle = 'rgba(255,170,90,0.85)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(hx, hy, hr * 2.1, -Math.PI / 2, -Math.PI / 2 + TAU * e.strikeCharge); ctx.stroke();
+      }
+    }
+    if (e.strikeT > 0) {                              // motion blur on the striking head
+      ctx.strokeStyle = 'rgba(230,214,170,0.28)';
+      ctx.lineWidth = e.r * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(hx - cos * e.r * 4.4, hy - sin * e.r * 4.4);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  drawMouse(ctx, e, day) {
+    const lit = 0.55 + 0.45 * day;
+    const hop = Math.sin(e.hop) * clamp((e.speedNow || 0) / 120, 0, 1);
+    const r = e.r;
+    ctx.save();
+    ctx.translate(e.x, e.y); ctx.rotate(e.angle);
+    ctx.globalAlpha = (R.overdraw ? 0.72 : (e.inBush ? 0.55 : 1)) * (e.immune > 0 ? 0.62 : 1);
+
+    ctx.fillStyle = 'rgba(20,14,6,0.28)';
+    ctx.beginPath(); ctx.ellipse(2, 5, r * 1.25, r * 0.85, 0, 0, TAU); ctx.fill();
+
+    // Tail: a long line that waves while running.
+    ctx.strokeStyle = 'rgb(' + ((190 * lit) | 0) + ',' + ((150 * lit) | 0) + ',' + ((124 * lit) | 0) + ')';
+    ctx.lineWidth = Math.max(1.4, r * 0.18); ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.05, 0);
+    ctx.quadraticCurveTo(-r * 2.0, Math.sin(e.tail) * r * 0.9, -r * 3.0, Math.sin(e.tail + 1.1) * r * 1.1);
+    ctx.stroke();
+
+    // Ears.
+    ctx.fillStyle = 'rgb(' + ((150 * lit) | 0) + ',' + ((120 * lit) | 0) + ',' + ((98 * lit) | 0) + ')';
+    ctx.beginPath(); ctx.ellipse(r * 0.45, -r * 0.85, r * 0.52, r * 0.46, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(r * 0.45, r * 0.85, r * 0.52, r * 0.46, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(232,170,164,' + (0.85 * lit).toFixed(3) + ')';
+    ctx.beginPath(); ctx.ellipse(r * 0.48, -r * 0.85, r * 0.28, r * 0.24, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(r * 0.48, r * 0.85, r * 0.28, r * 0.24, 0, 0, TAU); ctx.fill();
+
+    // Body: chest heaves faster when frightened.
+    const breathe = 1 + Math.sin(World.time * (6 + e.fear * 12)) * (0.03 + e.fear * 0.05);
+    const bodyR = (e.isPlayer ? 'rgb(' + ((196 * lit) | 0) + ',' + ((160 * lit) | 0) + ',' + ((116 * lit) | 0) + ')'
+                              : 'rgb(' + ((172 * lit) | 0) + ',' + ((140 * lit) | 0) + ',' + ((104 * lit) | 0) + ')');
+    ctx.fillStyle = bodyR;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.25 * breathe, r * 0.92 * breathe + hop * 0.8, 0, 0, TAU); ctx.fill();
+    // Fur strokes.
+    ctx.strokeStyle = 'rgba(110,84,56,' + (0.35 * lit).toFixed(3) + ')'; ctx.lineWidth = 1;
+    for (let k = 0; k < 5; k++) {
+      const ang = -0.8 + k * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang) * r * 0.3, Math.sin(ang) * r * 0.55);
+      ctx.lineTo(Math.cos(ang) * r * 1.0, Math.sin(ang) * r * 0.85);
+      ctx.stroke();
+    }
+    // Snout, eye, whiskers.
+    ctx.fillStyle = 'rgb(' + ((206 * lit) | 0) + ',' + ((176 * lit) | 0) + ',' + ((140 * lit) | 0) + ')';
+    ctx.beginPath(); ctx.ellipse(r * 1.05, 0, r * 0.52, r * 0.42, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#e29a9a';
+    ctx.beginPath(); ctx.arc(r * 1.5, 0, Math.max(1, r * 0.15), 0, TAU); ctx.fill();
+    ctx.fillStyle = '#120c06';
+    ctx.beginPath(); ctx.arc(r * 0.66, -r * 0.42, Math.max(1, r * 0.17), 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(r * 0.66, r * 0.42, Math.max(1, r * 0.17), 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(240,230,210,0.6)'; ctx.lineWidth = 0.9;
+    for (let k = -1; k <= 1; k++) {
+      ctx.beginPath();
+      ctx.moveTo(r * 1.3, k * r * 0.12);
+      ctx.lineTo(r * 2.1, k * r * 0.7 - r * 0.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(r * 1.3, -k * r * 0.12);
+      ctx.lineTo(r * 2.1, -k * r * 0.7 + r * 0.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (e.venom > 0) {                               // sick green pulse
+      const k = clamp(e.venom / CONFIG.VENOM_DURATION, 0, 1);
+      ctx.strokeStyle = 'rgba(120,230,120,' + (0.25 + 0.35 * Math.abs(Math.sin(World.time * 4))).toFixed(3) + ')';
+      ctx.lineWidth = 2 + k * 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r * 1.9, 0, TAU); ctx.stroke();
+    }
+    if (e.flash > 0) {
+      ctx.strokeStyle = 'rgba(170,255,210,' + e.flash.toFixed(3) + ')'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r * (2 + (1 - e.flash) * 3), 0, TAU); ctx.stroke();
+    }
+    if (e.squeakMark > 0) {
+      ctx.strokeStyle = 'rgba(255,190,120,' + (0.4 * e.squeakMark / 2).toFixed(3) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y, r * 2 + (2 - e.squeakMark) * 90, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  },
+
+  drawNight(ctx, day) {
+    const p = Game.player;
+    const n = 1 - day;
+    if (n > 0.02) {
+      ctx.fillStyle = 'rgba(10,16,54,' + (0.48 * n).toFixed(3) + ')';
+      ctx.fillRect(0, 0, this.w, this.h);
+      // A mouse's world shrinks after dark.
+      if (p && p.alive && p.kind === 'mouse') {
+        const rad = (205 + 150 * day) * Camera.zoom;
+        const g = ctx.createRadialGradient(this.w / 2, this.h / 2, rad * 0.3, this.w / 2, this.h / 2, rad * 1.5);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, 'rgba(3,5,16,' + (0.92 * n).toFixed(3) + ')');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, this.w, this.h);
+      }
+      // Pit organ: the snake sees warm bodies glowing through the bushes.
+      if (p && p.alive && p.kind === 'snake' && n > 0.3) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        for (const o of Game.entities) {
+          if (!o.alive || o.kind !== 'mouse' || o.burrow) continue;
+          const d2 = dist2(o.x, o.y, p.x, p.y);
+          if (d2 > CONFIG.PIT_ORGAN_RANGE * CONFIG.PIT_ORGAN_RANGE) continue;
+          const sxp = (o.x - Camera.x) * Camera.zoom + this.w / 2;
+          const syp = (o.y - Camera.y) * Camera.zoom + this.h / 2;
+          const rr = (o.r * 3.4) * Camera.zoom;
+          const g = ctx.createRadialGradient(sxp, syp, 0, sxp, syp, rr);
+          const a = clamp(1 - Math.sqrt(d2) / CONFIG.PIT_ORGAN_RANGE, 0, 1) * n;
+          g.addColorStop(0, 'rgba(255,70,40,' + (0.55 * a).toFixed(3) + ')');
+          g.addColorStop(1, 'rgba(255,40,20,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(sxp, syp, rr, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+    // Venom haze: desaturated, blurred, closing in.
+    if (p && p.alive && p.kind === 'mouse' && p.venom > 0) {
+      const k = clamp(p.venom / CONFIG.VENOM_DURATION, 0, 1);
+      ctx.fillStyle = 'rgba(70,120,70,' + (0.18 * k).toFixed(3) + ')';
+      ctx.fillRect(0, 0, this.w, this.h);
+      const g = ctx.createRadialGradient(this.w / 2, this.h / 2, Math.min(this.w, this.h) * (0.5 - 0.28 * k), this.w / 2, this.h / 2, Math.min(this.w, this.h) * 0.9);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(10,20,10,' + (0.75 * k).toFixed(3) + ')');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, this.w, this.h);
+    }
+  }
+};
+const SNAKE_PTS = new Float32Array(160);
+const SNAKE_NRM = new Float32Array(160);
+const SNAKE_RAD = new Float32Array(80);
+
+/* ------------------------------ 12. HUD ----------------------------- */
+R.bar = function (ctx, x, y, w, h, v, col, bg) {
+  ctx.fillStyle = bg || 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.fill();
+  if (v > 0) {
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.roundRect(x, y, Math.max(h, w * clamp(v, 0, 1)), h, h / 2); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,235,190,0.22)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, h / 2); ctx.stroke();
+};
+
+R.drawHUD = function (ctx) {
+  const p = Game.player;
+  const safeT = Input.safe.top, safeR = Input.safe.right, safeL = Input.safe.left, safeB = Input.safe.bottom;
+  ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+  ctx.textBaseline = 'middle';
+  ctx.direction = 'rtl';
+
+  // --- Minimap (top-right) ---
+  const ms = Math.min(150, Math.max(104, this.w * 0.30));
+  const mx = this.w - ms - 10 - safeR, my = 10 + safeT;
+  if (!this.miniBase) this.buildMinimap();
+  ctx.globalAlpha = 0.9;
+  ctx.drawImage(this.miniBase, mx, my, ms, ms);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgba(232,201,138,0.5)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(mx + 0.5, my + 0.5, ms, ms);
+  const k = ms / World.size;
+  if (p && p.alive) {
+    // Important markers only: envenomated prey (snake) or nearest healer (mouse).
+    if (p.kind === 'snake' && p.prey && p.prey.alive) {
+      const blink = (World.time * 4) % 1 > 0.4;
+      if (blink) {
+        ctx.fillStyle = '#7bf07b';
+        ctx.beginPath(); ctx.arc(mx + p.prey.x * k, my + p.prey.y * k, 3.5, 0, TAU); ctx.fill();
+      }
+    }
+    if (p.kind === 'mouse' && p.venom > 0) {
+      const h = nearestHealthyMouse(p);
+      if (h) { ctx.fillStyle = '#8ce8ff'; ctx.beginPath(); ctx.arc(mx + h.x * k, my + h.y * k, 3.5, 0, TAU); ctx.fill(); }
+    }
+    ctx.fillStyle = '#ffd86a';
+    ctx.beginPath(); ctx.arc(mx + p.x * k, my + p.y * k, 4, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  // Day / night dial under the minimap.
+  const day = World.dayFactor();
+  ctx.font = '12px Tahoma, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(240,226,196,0.85)';
+  ctx.fillText((day < 0.4 ? '🌙 شب' : (day < 0.75 ? '🌤 غروب/طلوع' : '☀ روز')) + ' · زنده: ' + fa(Game.aliveCount()),
+    mx + ms, my + ms + 14);
+  if (p) ctx.fillText('رتبه ' + fa(Game.rank(p)), mx + ms, my + ms + 32);
+
+  if (!p || !p.alive) return;
+
+  // --- Bars (top-left, under the small buttons) ---
+  const bx = 12 + safeL, by = 58 + safeT, bw = Math.min(190, this.w * 0.42), bh = 11;
+  ctx.textAlign = 'left';
+  ctx.font = '12px Tahoma, sans-serif';
+  this.bar(ctx, bx, by, bw, bh, clamp(p.mass / 120, 0.02, 1), '#e8c98a');
+  ctx.fillStyle = '#f0e2c4';
+  ctx.fillText('جرم ' + fa(Math.round(p.mass)), bx + bw + 8, by + bh / 2);
+  this.bar(ctx, bx, by + 18, bw, bh, p.hp / p.maxHp, '#c9553f');
+  ctx.fillStyle = '#f0e2c4';
+  ctx.fillText('جان', bx + bw + 8, by + 18 + bh / 2);
+
+  if (p.kind === 'snake') {
+    this.bar(ctx, bx, by + 36, bw, bh, p.coil, p.coil >= 1 ? '#ffd05a' : '#6fc3e8');
+    ctx.fillStyle = p.coil >= 1 ? '#ffd05a' : '#f0e2c4';
+    ctx.fillText(p.ambush ? (p.coil >= 1 ? 'کمین — آماده!' : 'کمین…') : 'تنش', bx + bw + 8, by + 36 + bh / 2);
+    if (p.digest > 0) { ctx.fillStyle = '#e8a05a'; ctx.fillText('در حال هضم…', bx, by + 58); }
+    else if (p.cooldown > 0) { ctx.fillStyle = '#d08080'; ctx.fillText('ضربه خطا رفت!', bx, by + 58); }
+  } else {
+    if (p.venom > 0) {
+      const left = clamp(1 - p.venom / CONFIG.VENOM_DURATION, 0, 1);
+      this.bar(ctx, bx, by + 36, bw, bh, left, '#66d466');
+      ctx.fillStyle = '#9cf09c';
+      ctx.fillText('زهر · ' + fa(Math.ceil(CONFIG.VENOM_DURATION - p.venom)) + ' ثانیه', bx + bw + 8, by + 36 + bh / 2);
+      if (p.healProg > 0) {
+        this.bar(ctx, bx, by + 54, bw, bh, p.healProg / CONFIG.HEAL_TIME, '#7ee8c0');
+        ctx.fillStyle = '#a8f0d8'; ctx.fillText('درمان', bx + bw + 8, by + 54 + bh / 2);
+      }
+    } else if (p.burrow) {
+      this.bar(ctx, bx, by + 36, bw, bh, p.burrowT / CONFIG.BURROW_SAFE_TIME, '#9a8ae8');
+      ctx.fillStyle = '#cfc4ff'; ctx.fillText('داخل سوراخ', bx + bw + 8, by + 36 + bh / 2);
+    }
+  }
+
+  // --- Poisoned player: arrow pointing at the nearest healthy mouse ---
+  if (p.kind === 'mouse' && p.venom > 0) {
+    const h = nearestHealthyMouse(p);
+    if (h) {
+      const a = Math.atan2(h.y - p.y, h.x - p.x);
+      const cx = this.w / 2, cy = this.h / 2, rr = Math.min(this.w, this.h) * 0.30;
+      ctx.save();
+      ctx.translate(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      ctx.rotate(a);
+      ctx.fillStyle = 'rgba(140,232,255,0.9)';
+      ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -9); ctx.lineTo(-10, 9); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // --- Touch controls ---
+  this.drawJoystick(ctx);
+  this.drawButtons(ctx);
+};
+
+function nearestHealthyMouse(p) {
+  let best = null, bd = 1e18;
+  for (const o of Game.entities) {
+    if (!o.alive || o.kind !== 'mouse' || o === p || o.venom > 0 || o.burrow) continue;
+    const d2 = dist2(p.x, p.y, o.x, o.y);
+    if (d2 < bd) { bd = d2; best = o; }
+  }
+  return best;
+}
+
+R.drawJoystick = function (ctx) {
+  const j = Input.joy;
+  if (!j.active) return;
+  ctx.strokeStyle = 'rgba(240,226,196,0.28)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(j.ox, j.oy, j.radius, 0, TAU); ctx.stroke();
+  ctx.fillStyle = 'rgba(240,226,196,0.10)';
+  ctx.beginPath(); ctx.arc(j.ox, j.oy, j.radius, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(240,226,196,0.55)';
+  ctx.beginPath(); ctx.arc(j.kx, j.ky, 24, 0, TAU); ctx.fill();
+};
+
+R.drawButtons = function (ctx) {
+  const B = Input.buttons;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < B.length; i++) {
+    const b = B[i];
+    const press = b.down ? 0.90 : 1;
+    const r = b.r * press;
+    ctx.globalAlpha = b.enabled ? 1 : 0.35;
+    ctx.fillStyle = b.down ? 'rgba(232,201,138,0.55)' : 'rgba(30,22,12,0.55)';
+    ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(232,201,138,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, TAU); ctx.stroke();
+    if (b.ring > 0) {                        // charge ring around the strike button
+      ctx.strokeStyle = 'rgba(255,170,90,0.95)'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(b.x, b.y, r - 4, -Math.PI / 2, -Math.PI / 2 + TAU * b.ring); ctx.stroke();
+    }
+    ctx.fillStyle = b.down ? '#20180d' : '#f0e2c4';
+    ctx.font = 'bold ' + Math.round(r * 0.36) + 'px Tahoma, sans-serif';
+    ctx.fillText(b.label, b.x, b.y);
+    ctx.globalAlpha = 1;
+  }
+};
+
+/* ----------------------------- 13. INPUT ---------------------------- */
+const Input = {
+  joy: { active: false, id: -1, ox: 0, oy: 0, kx: 0, ky: 0, radius: 62 },
+  buttons: [],
+  keys: {},
+  safe: { top: 0, right: 0, bottom: 0, left: 0 },
+
+  init() {
+    this.readSafe();
+    const c = R.canvas;
+    const opts = { passive: false };
+    c.addEventListener('pointerdown', e => this.down(e), opts);
+    c.addEventListener('pointermove', e => this.move(e), opts);
+    c.addEventListener('pointerup', e => this.up(e), opts);
+    c.addEventListener('pointercancel', e => this.up(e), opts);
+    c.addEventListener('contextmenu', e => e.preventDefault());
+    document.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, opts);
+    document.addEventListener('gesturestart', e => e.preventDefault());
+    window.addEventListener('keydown', e => {
+      this.keys[e.code] = true;
+      if ([' ', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.key) >= 0 ||
+          e.code === 'Space') e.preventDefault();
+      if (e.code === 'KeyP') UI.togglePause();
+      if (e.code === 'KeyM') UI.toggleMute();
+    });
+    window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+    window.addEventListener('blur', () => UI.autoPause());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) UI.autoPause(); });
+  },
+  readSafe() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);' +
+      'padding-right:env(safe-area-inset-right);padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);';
+    document.body.appendChild(probe);
+    const cs = getComputedStyle(probe);
+    this.safe.top = parseFloat(cs.paddingTop) || 0;
+    this.safe.right = parseFloat(cs.paddingRight) || 0;
+    this.safe.bottom = parseFloat(cs.paddingBottom) || 0;
+    this.safe.left = parseFloat(cs.paddingLeft) || 0;
+    document.body.removeChild(probe);
+  },
+
+  // Buttons persist across frames (a held pointer keeps its identity) and are
+  // rebuilt only when the player's role changes.
+  layout() {
+    const p = Game.player;
+    const B = this.buttons;
+    if (!p || !p.alive || Game.state !== 'playing') { B.length = 0; this.btnRole = null; return; }
+    if (this.btnRole !== p.kind || B.length !== 2) {
+      B.length = 0; this.btnRole = p.kind;
+      if (p.kind === 'snake') {
+        B.push({ id: 'strike', x: 0, y: 0, r: 46, label: 'ضربه', down: false, pid: -1, enabled: true, ring: 0 });
+        B.push({ id: 'slow', x: 0, y: 0, r: 38, label: 'آهسته', down: false, pid: -1, enabled: true, ring: 0 });
+      } else {
+        B.push({ id: 'squeak', x: 0, y: 0, r: 46, label: 'جیغ', down: false, pid: -1, enabled: true, ring: 0 });
+        B.push({ id: 'burrow', x: 0, y: 0, r: 38, label: 'سوراخ', down: false, pid: -1, enabled: true, ring: 0 });
+      }
+    }
+    const bx = R.w - 76 - this.safe.right, by = R.h - 92 - this.safe.bottom;
+    B[0].x = bx; B[0].y = by;
+    B[1].x = bx - 104; B[1].y = by + 26;
+    if (p.kind === 'snake') {
+      B[0].enabled = p.cooldown <= 0 && p.digest <= 0 && p.strikeT <= 0;
+      B[0].ring = p.charging ? p.strikeCharge : (p.cooldown > 0 ? 1 - p.cooldown / CONFIG.STRIKE_COOLDOWN : 0);
+    } else {
+      B[0].enabled = p.squeakCd <= 0;
+      B[0].ring = p.squeakCd > 0 ? 1 - p.squeakCd / 3.5 : 0;
+      const bur = nearestBurrow(p.x, p.y, 70);
+      B[1].label = p.burrow ? 'بیرون' : 'سوراخ';
+      B[1].enabled = !!bur || !!p.burrow;
+      B[1].ring = p.burrow ? p.burrowT / CONFIG.BURROW_SAFE_TIME : 0;
+    }
+  },
+
+  hitButton(x, y) {
+    for (const b of this.buttons) {
+      if (dist2(x, y, b.x, b.y) < (b.r + 12) * (b.r + 12)) return b;
+    }
+    return null;
+  },
+
+  down(ev) {
+    ev.preventDefault();
+    Sound.init(); Sound.resume();
+    if (Game.state !== 'playing') return;
+    const x = ev.clientX, y = ev.clientY;
+    const b = this.hitButton(x, y);
+    if (b) {
+      b.down = true; b.pid = ev.pointerId;
+      this.press(b, true);
+      return;
+    }
+    if (x < R.w * 0.55 && !this.joy.active) {       // floating joystick, left half
+      const j = this.joy;
+      j.active = true; j.id = ev.pointerId;
+      j.ox = x; j.oy = y; j.kx = x; j.ky = y;
+    }
+  },
+  move(ev) {
+    const j = this.joy;
+    if (j.active && ev.pointerId === j.id) {
+      ev.preventDefault();
+      let dx = ev.clientX - j.ox, dy = ev.clientY - j.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > j.radius) { dx *= j.radius / d; dy *= j.radius / d; }
+      j.kx = j.ox + dx; j.ky = j.oy + dy;
+    }
+  },
+  up(ev) {
+    const j = this.joy;
+    if (j.active && ev.pointerId === j.id) { j.active = false; j.id = -1; }
+    for (const b of this.buttons) {
+      if (b.down && b.pid === ev.pointerId) { b.down = false; this.press(b, false); }
+    }
+  },
+
+  press(b, isDown) {
+    const p = Game.player;
+    if (!p || !p.alive) return;
+    if (b.id === 'strike') {
+      if (isDown) { if (p.cooldown <= 0 && p.digest <= 0) { p.charging = true; vibrate(10); } }
+      else if (p.charging) releaseStrike(p);        // hold = charge, release = launch
+    } else if (b.id === 'squeak') {
+      if (isDown && p.squeakCd <= 0) { squeak(p); vibrate(15); }
+    } else if (b.id === 'burrow') {
+      if (isDown) {
+        if (p.burrow) leaveBurrow(p);
+        else { const bu = nearestBurrow(p.x, p.y, 70); if (bu) { enterBurrow(p, bu); vibrate(15); } }
+      }
+    } else if (b.id === 'slow' && isDown) vibrate(8);
+  },
+
+  // Translate joystick + keyboard into throttle/heading. Release = full stop.
+  apply(p) {
+    if (!p || !p.alive) return;
+    let ax = 0, ay = 0, mag = 0;
+    const j = this.joy;
+    if (j.active) {
+      const dx = j.kx - j.ox, dy = j.ky - j.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > 6) { ax = dx / d; ay = dy / d; mag = clamp((d - 6) / (j.radius - 6), 0, 1); }
+    }
+    let kx = 0, ky = 0;
+    if (this.keys.KeyA || this.keys.ArrowLeft) kx -= 1;
+    if (this.keys.KeyD || this.keys.ArrowRight) kx += 1;
+    if (this.keys.KeyW || this.keys.ArrowUp) ky -= 1;
+    if (this.keys.KeyS || this.keys.ArrowDown) ky += 1;
+    if (kx || ky) {
+      const d = Math.hypot(kx, ky);
+      ax = kx / d; ay = ky / d;
+      mag = (this.keys.ShiftLeft || this.keys.ShiftRight) ? 0.24 : 1;
+    }
+    const slowBtn = this.buttons.find(b => b.id === 'slow' && b.down);
+    if (slowBtn) mag = Math.min(mag, 0.22);          // deliberate silent crawl
+
+    if (mag > 0.001) { p.desired = Math.atan2(ay, ax); p.throttle = mag; }
+    else p.throttle = 0;                             // let go and the creature simply stops
+
+    // Keyboard actions (kept separate from the touch button, so holding one
+    // never cancels the other).
+    if (p.kind === 'snake') {
+      const sp = !!this.keys.Space;
+      if (sp && !p.charging && p.cooldown <= 0 && p.digest <= 0) { p.charging = true; this.spaceCharge = true; }
+      else if (!sp && this.spaceCharge) { this.spaceCharge = false; if (p.charging) releaseStrike(p); }
+    } else {
+      if (this.keys.Space && p.squeakCd <= 0) squeak(p);
+      if (this.keys.KeyE && !this._eLatch) {
+        this._eLatch = true;
+        if (p.burrow) leaveBurrow(p);
+        else { const bu = nearestBurrow(p.x, p.y, 70); if (bu) enterBurrow(p, bu); }
+      }
+      if (!this.keys.KeyE) this._eLatch = false;
+    }
+  }
+};
+
+/* ------------------------------- 14. UI ----------------------------- */
+const $ = id => document.getElementById(id);
+const UI = {
+  spawnTimer: 0, toastT: 0, hintTimer: 0, hintStep: 0,
+
+  init() {
+    $('btnStart').onclick = () => { Sound.init(); Sound.resume(); this.hide('scrMenu'); Game.start(); };
+    $('btnAgain').onclick = () => { this.hide('scrDead'); Game.entities = Game.entities.filter(e => e.alive); Game.spawnPlayer(); };
+    $('btnResume').onclick = () => { this.hide('scrPause'); Game.state = 'playing'; Sound.resume(); };
+    $('btnQuit').onclick = () => {
+      this.hide('scrPause');
+      if (Game.player && Game.player.alive) killEntity(Game.player, null, 'رها کردی');
+      Game.state = 'dead'; this.showDeath();
+    };
+    $('btnPause').onclick = () => this.togglePause();
+    $('btnMute').onclick = () => this.toggleMute();
+  },
+  show(id) { const el = $(id); el.style.display = 'flex'; el.classList.add('on'); },
+  hide(id) { const el = $(id); el.classList.remove('on'); el.style.display = 'none'; },
+
+  showSpawnCard(isSnake) {
+    $('spawnRole').textContent = isSnake ? 'مار' : 'موش';
+    $('spawnRole').className = 'big ' + (isSnake ? 'snakeC' : 'mouseC');
+    $('spawnTxt').innerHTML = isSnake
+      ? 'گرسنه‌ای. صبور باش.<br><span style="color:#9d8a6c">داخل بوته بایست و بی‌حرکت بمان تا نامرئی شوی.</span>'
+      : 'همه می‌خواهند تو را بخورند. موفق باشی.<br><span style="color:#9d8a6c">دانه‌ها کنار بوته‌اند… و مارها هم همان‌جا.</span>';
+    this.show('scrSpawn');
+    Game.state = 'spawning';
+    this.spawnTimer = 2.0;
+  },
+  showDeath() {
+    const s = Game.lastStats || { mass: 0, kills: 0, time: 0, rank: 0, cause: '', kind: 'mouse' };
+    $('deadTitle').textContent = s.kind === 'snake' ? 'مار مُرد' : 'موش مُرد';
+    $('deadTxt').textContent = s.cause || 'پایان این جان.';
+    $('stMass').textContent = fa(s.mass);
+    $('stKills').textContent = fa(s.kills);
+    $('stTime').textContent = fa(s.time) + ' ثانیه';
+    $('stRank').textContent = fa(s.rank);
+    this.show('scrDead');
+  },
+  togglePause() {
+    if (Game.state === 'playing') { Game.state = 'paused'; this.show('scrPause'); }
+    else if (Game.state === 'paused') { this.hide('scrPause'); Game.state = 'playing'; Sound.resume(); }
+  },
+  autoPause() { if (Game.state === 'playing') { Game.state = 'paused'; this.show('scrPause'); } },
+  toggleMute() {
+    Sound.init();
+    Sound.setMuted(!Sound.muted);
+    $('btnMute').textContent = Sound.muted ? '✕' : '♪';
+  },
+  toast(msg) {
+    const el = $('toastTxt');
+    el.textContent = msg; el.classList.add('on');
+    this.toastT = 1.8;
+  },
+  setHint(msg) {
+    const el = $('hintTxt');
+    el.textContent = msg; el.classList.add('on');
+    this.hintTimer = 5.5;
+  },
+  // Short, contextual coaching in the first 30 seconds — no tutorial menu.
+  updateHints(dt) {
+    if (this.toastT > 0 && (this.toastT -= dt) <= 0) $('toastTxt').classList.remove('on');
+    if (this.hintTimer > 0 && (this.hintTimer -= dt) <= 0) $('hintTxt').classList.remove('on');
+    const p = Game.player;
+    if (!p || !p.alive || Game.runTime > 34) return;
+    const t = Game.runTime;
+    const snake = p.kind === 'snake';
+    const steps = snake
+      ? [[1.5, 'انگشتت را نیمه چپ صفحه بکش تا حرکت کنی. رها کنی، می‌ایستی.'],
+         [9, 'برای کمین، داخل بوته بایست و بی‌حرکت بمان.'],
+         [17, 'دکمه ضربه را نگه دار تا شارژ شود، بعد رها کن.'],
+         [25, 'شکار بزرگ‌تر از خودت را زهر بزن و دنبالش برو.']]
+      : [[1.5, 'انگشتت را نیمه چپ صفحه بکش. آهسته بروی، کسی نمی‌فهمد.'],
+         [9, 'دانه‌های داخل بوته دو برابر ارزش دارند — و دو برابر خطر.'],
+         [17, 'موج‌های روی زمین یعنی چیزی سریع حرکت کرد. مار بی‌حرکت را نمی‌بینی.'],
+         [25, 'نیش خوردی؟ کنار یک موش سالم ۵ ثانیه بمان تا درمان شوی.']];
+    if (this.hintStep < steps.length && t > steps[this.hintStep][0]) {
+      this.setHint(steps[this.hintStep][1]);
+      this.hintStep++;
+    }
+    if (t < 0.2) this.hintStep = 0;
+  }
+};
+
+/* ---------------- 15. AMBIENT TENSION (heartbeat) ------------------- */
+function updateTension(dt) {
+  const p = Game.player;
+  if (!p || !p.alive) return;
+  let danger = 0;
+  const near = World.entGrid.query(p.x, p.y, 420, tmpA);
+  for (let i = 0; i < near.length; i++) {
+    const o = near[i];
+    if (o === p || !o.alive) continue;
+    const d = Math.sqrt(dist2(p.x, p.y, o.x, o.y));
+    if (p.kind === 'mouse' && o.kind === 'snake' && o.mass * CONFIG.VENOM_RATIO > p.mass)
+      danger = Math.max(danger, clamp(1 - d / 420, 0, 1));
+    if (p.kind === 'snake' && ((o.kind === 'mouse' && o.mass >= p.mass * CONFIG.VENOM_RATIO) ||
+        (o.kind === 'snake' && o.mass >= p.mass * CONFIG.SNAKE_CATCH_RATIO)))
+      danger = Math.max(danger, clamp(1 - d / 420, 0, 1));
+  }
+  if (p.kind === 'snake' && p.ambush) danger = Math.max(danger, 0.35 + p.coil * 0.3);
+  if (p.kind === 'mouse' && p.venom > 0) danger = Math.max(danger, 0.55 + 0.45 * clamp(p.venom / CONFIG.VENOM_DURATION, 0, 1));
+  if (danger > 0.18) Sound.heart(clamp(danger, 0, 1) * 0.9, danger > 0.6);
+}
+
+/* --------------------------- 16. GAME LOOP -------------------------- */
+const FIXED = 1 / 60;
+let acc = 0, last = 0;
+
+function loop(ts) {
+  requestAnimationFrame(loop);
+  if (!last) last = ts;
+  let dt = (ts - last) / 1000;
+  last = ts;
+  if (dt > 0.25) dt = 0.25;                       // after a phone call / tab switch
+
+  if (Game.state === 'spawning') {
+    UI.spawnTimer -= dt;
+    if (UI.spawnTimer <= 0) { UI.hide('scrSpawn'); Game.state = 'playing'; }
+  }
+
+  if (Game.state === 'playing' || Game.state === 'dead') {
+    acc += dt;
+    let steps = 0;
+    while (acc >= FIXED && steps < 5) {            // fixed timestep: physics never drifts
+      if (Game.state === 'playing') Input.apply(Game.player);
+      Game.step(FIXED);
+      acc -= FIXED;
+      steps++;
+    }
+    if (steps === 5) acc = 0;
+    updateTension(dt);
+  }
+  if (Game.state !== 'menu') {
+    Input.layout();
+    R.frame(acc / FIXED);
+  }
+}
+
+/* ------------------------------ BOOTSTRAP --------------------------- */
+(function boot() {
+  R.init();
+  Input.init();
+  UI.init();
+  // A first touch anywhere resumes the AudioContext (mobile autoplay policy).
+  const kick = () => { Sound.init(); Sound.resume(); };
+  window.addEventListener('pointerdown', kick, { once: false });
+  window.addEventListener('keydown', kick, { once: false });
+  requestAnimationFrame(loop);
+})();
+</script>
