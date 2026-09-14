@@ -126,7 +126,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#14100a;
 
 /* ----------------------------- 1. CONFIG ---------------------------- */
 const CONFIG = {
-  WORLD_SIZE: 6000,
+  WORLD_SIZE: 4200,          // tighter arena = you actually meet other animals
   START_MASS: 10,
   // A mouse of equal mass is FASTER than a snake: the snake cannot win a chase,
   // it has to ambush. This is the core of the balance.
@@ -167,8 +167,10 @@ const CONFIG = {
   SEED_RING: 200,             // how far seeds spread around a bush
   CORPSE_MASS_RATIO: 0.6,
   CORPSE_LIFETIME: 20,
-  BOT_COUNT: 40,
-  SNAKE_BOT_SHARE: 0.45,      // fraction of bots that are snakes
+  BOT_COUNT: 130,
+  SNAKE_BOT_SHARE: 0.35,      // a busy map: plenty of snakes, but mice outnumber them
+  TRAFFIC_RING: 1500,         // bots respawn in a ring this deep around the player
+  RECYCLE_DIST: 2400,         // a bot that strays this far is moved back into play
   SPAWN_IMMUNITY: 3,
   DIGEST_BASE: 1.5,
   DIGEST_SLOW: 0.5,
@@ -212,9 +214,10 @@ function vnoise(x, y) {                 // smooth value noise in [0,1]
 
 /* ----------------------------- 3. AUDIO ----------------------------- */
 // Every sound is synthesised with the Web Audio API — zero audio files.
+const MASTER_VOL = 0.55;
 const Sound = {
   ctx: null, master: null, muted: false, ready: false,
-  windGain: null, nightGain: null, lastHeart: 0,
+  windGain: null, nightGain: null, lastHeart: 0, last: {},
 
   init() {
     if (this.ready) return;
@@ -222,9 +225,16 @@ const Sound = {
     if (!AC) return;
     try { this.ctx = new AC(); } catch (e) { return; }
     const ctx = this.ctx;
+    // Master chain: everything goes through a gentle low-pass and a
+    // compressor, so no single effect can ever get shrill or spiky.
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.85;
-    this.master.connect(ctx.destination);
+    this.master.gain.value = this.muted ? 0 : MASTER_VOL;
+    const tame = ctx.createBiquadFilter();
+    tame.type = 'lowpass'; tame.frequency.value = 3400; tame.Q.value = 0.5;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -26; comp.knee.value = 22; comp.ratio.value = 8;
+    comp.attack.value = 0.004; comp.release.value = 0.22;
+    this.master.connect(tame); tame.connect(comp); comp.connect(ctx.destination);
 
     // Shared noise buffer (2 s of white noise) reused by every noisy effect.
     const len = ctx.sampleRate * 2;
@@ -234,10 +244,10 @@ const Sound = {
 
     // Continuous desert wind: looped noise through a slowly wobbling lowpass.
     const wind = ctx.createBufferSource(); wind.buffer = this.noiseBuf; wind.loop = true;
-    const wf = ctx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420; wf.Q.value = 0.7;
-    this.windGain = ctx.createGain(); this.windGain.gain.value = 0.075;
+    const wf = ctx.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 240; wf.Q.value = 0.6;
+    this.windGain = ctx.createGain(); this.windGain.gain.value = 0.030;
     const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
-    const lfoG = ctx.createGain(); lfoG.gain.value = 180;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 90;
     lfo.connect(lfoG); lfoG.connect(wf.frequency);
     wind.connect(wf); wf.connect(this.windGain); this.windGain.connect(this.master);
     wind.start(); lfo.start();
@@ -247,13 +257,21 @@ const Sound = {
     this.nightGain.connect(this.master);
     [55, 82.5, 110.3].forEach((f, i) => {
       const o = ctx.createOscillator(); o.type = i === 2 ? 'triangle' : 'sine'; o.frequency.value = f;
-      const g = ctx.createGain(); g.gain.value = 0.16 / (i + 1);
+      const g = ctx.createGain(); g.gain.value = 0.10 / (i + 1);
       o.connect(g); g.connect(this.nightGain); o.start();
     });
     this.ready = true;
   },
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
-  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.85; },
+  setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : MASTER_VOL; },
+  // Rate limiter: each kind of sound may only fire so often, so a crowd of
+  // creatures can never turn the arena into a wall of noise.
+  gate(key, minGap) {
+    const t = this.now();
+    if (this.last[key] && t - this.last[key] < minGap) return false;
+    this.last[key] = t;
+    return true;
+  },
   now() { return this.ctx ? this.ctx.currentTime : 0; },
   ok() { return this.ready && !this.muted && this.ctx && this.ctx.state === 'running'; },
 
@@ -287,25 +305,40 @@ const Sound = {
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + dur + 0.02);
   },
-  rustle(v) { this.noise(0.16 * v, 0.22, 'bandpass', 2600, 1400, 1.2); },
-  hiss(v)   { this.noise(0.14 * v, 0.55, 'bandpass', 5200, 2600, 0.9); },
-  whoosh(v) { this.noise(0.22 * v, 0.26, 'bandpass', 900, 3200, 1.6); },
-  sand(v)   { this.noise(0.10 * v, 0.30, 'lowpass', 1400, 300, 1); },
-  squeak(v) {                                  // exaggerated mouse scream
-    this.tone(0.20 * v, 0.26, 'sawtooth', 1500 + Math.random() * 500, 620);
-    this.tone(0.10 * v, 0.20, 'square', 2400, 1100, 12);
+  // Leaves: a short, soft, low brush — never the hissy static it used to be.
+  rustle(v) {
+    if (!this.gate('rustle', 0.42)) return;
+    this.noise(0.045 * v, 0.26, 'lowpass', 900, 380, 0.7);
   },
-  gulp(v) { this.tone(0.24 * v, 0.30, 'sine', 190, 62); this.noise(0.10 * v, 0.22, 'lowpass', 700, 160, 1); },
-  bite(v) { this.noise(0.18 * v, 0.12, 'bandpass', 1800, 500, 2); this.tone(0.12 * v, 0.14, 'square', 140, 60); },
-  heal(v) { this.tone(0.13 * v, 0.5, 'sine', 520, 1040); this.tone(0.09 * v, 0.6, 'triangle', 780, 1560); },
+  hiss(v) {
+    if (!this.gate('hiss', 2.2)) return;
+    this.noise(0.045 * v, 0.5, 'bandpass', 1700, 900, 0.8);
+  },
+  whoosh(v) {
+    if (!this.gate('whoosh', 0.2)) return;
+    this.noise(0.09 * v, 0.24, 'bandpass', 700, 1600, 1.1);
+  },
+  sand(v) { if (this.gate('sand', 0.3)) this.noise(0.05 * v, 0.3, 'lowpass', 900, 240, 1); },
+  squeak(v) {                                  // a squeak, not a scream
+    if (!this.gate('squeak', 0.32)) return;
+    this.tone(0.085 * v, 0.20, 'triangle', 1050 + Math.random() * 260, 520);
+    this.tone(0.035 * v, 0.14, 'sine', 1600, 900, 8);
+  },
+  gulp(v) { this.tone(0.13 * v, 0.28, 'sine', 165, 58); this.noise(0.05 * v, 0.2, 'lowpass', 520, 150, 1); },
+  bite(v) {
+    if (!this.gate('bite', 0.25)) return;
+    this.noise(0.07 * v, 0.11, 'lowpass', 1100, 380, 1.2);
+    this.tone(0.06 * v, 0.13, 'triangle', 130, 58);
+  },
+  heal(v) { this.tone(0.07 * v, 0.5, 'sine', 520, 1040); this.tone(0.05 * v, 0.6, 'triangle', 780, 1560); },
   heart(v, fast) {                             // two thumps, rate driven by danger
     const t = this.now();
-    if (t - this.lastHeart < (fast ? 0.44 : 0.92)) return;
+    if (t - this.lastHeart < (fast ? 0.5 : 1.05)) return;
     this.lastHeart = t;
-    this.tone(0.30 * v, 0.16, 'sine', 68, 34);
-    setTimeout(() => this.tone(0.20 * v, 0.14, 'sine', 60, 30), fast ? 130 : 190);
+    this.tone(0.16 * v, 0.16, 'sine', 64, 32);
+    setTimeout(() => this.tone(0.11 * v, 0.14, 'sine', 56, 28), fast ? 140 : 200);
   },
-  setNight(n) { if (this.nightGain) this.nightGain.gain.value = 0.10 * n; }
+  setNight(n) { if (this.nightGain) this.nightGain.gain.value = 0.045 * n; }
 };
 
 /* -------------------- 4. SPATIAL HASH (never O(n^2)) ---------------- */
@@ -356,34 +389,34 @@ const World = {
     this.corpses.length = 0;
 
     // --- Bushes: overlapping clusters make safe corridors and death traps ---
-    const clusters = 46;
+    const clusters = 42;
     for (let c = 0; c < clusters; c++) {
       const cx = rnd(420, S - 420), cy = rnd(420, S - 420);
       const n = rndInt(2, 5);
       for (let i = 0; i < n; i++) {
-        const a = Math.random() * TAU, d = rnd(0, 260);
-        const r = rnd(80, 300);
+        const a = Math.random() * TAU, d = rnd(0, 340);
+        const r = rnd(80, 215);
         const x = clamp(cx + Math.cos(a) * d, 260, S - 260);
         const y = clamp(cy + Math.sin(a) * d, 260, S - 260);
         this.bushes.push(this.makeBush(x, y, r));
       }
     }
-    for (let i = 0; i < 34; i++) {  // lone bushes scattered between clusters
-      this.bushes.push(this.makeBush(rnd(260, S - 260), rnd(260, S - 260), rnd(80, 170)));
+    for (let i = 0; i < 26; i++) {  // lone bushes scattered between clusters
+      this.bushes.push(this.makeBush(rnd(200, S - 200), rnd(200, S - 200), rnd(80, 160)));
     }
 
     // --- Static scenery: rock clusters, pebbles, dry tufts, bones, dirt ---
-    for (let i = 0; i < 150; i++) this.props.push(this.makeRockCluster(rnd(60, S - 60), rnd(60, S - 60)));
-    for (let i = 0; i < 230; i++) this.props.push(this.makePebbles(rnd(60, S - 60), rnd(60, S - 60)));
-    for (let i = 0; i < 260; i++) this.props.push(this.makeTuft(rnd(60, S - 60), rnd(60, S - 60)));
-    for (let i = 0; i < 90; i++)
+    for (let i = 0; i < 105; i++) this.props.push(this.makeRockCluster(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 160; i++) this.props.push(this.makePebbles(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 180; i++) this.props.push(this.makeTuft(rnd(60, S - 60), rnd(60, S - 60)));
+    for (let i = 0; i < 65; i++)
       this.props.push({ kind: 2, x: rnd(60, S - 60), y: rnd(60, S - 60), r: rnd(10, 26), a: Math.random() * TAU });
-    for (let i = 0; i < 120; i++)
+    for (let i = 0; i < 85; i++)
       this.props.push({ kind: 1, x: rnd(60, S - 60), y: rnd(60, S - 60), r: rnd(30, 80), a: Math.random() * TAU });
 
     // --- Burrows: mouse-only shelters, never inside a bush ---
     let tries = 0;
-    while (this.burrows.length < 70 && tries < 3000) {
+    while (this.burrows.length < 60 && tries < 3000) {
       tries++;
       const x = rnd(140, S - 140), y = rnd(140, S - 140);
       if (this.bushAt(x, y)) continue;
@@ -427,7 +460,7 @@ const World = {
     return {
       x, y, r,
       species: Math.random() < 0.32 ? 0 : 1,          // 0 green, 1 dry
-      sizeClass: r < 140 ? 0 : (r < 230 ? 1 : 2),
+      sizeClass: r < 125 ? 0 : (r < 175 ? 1 : 2),
       variant: (Math.random() * 3) | 0,
       rot: Math.random() * TAU,
       shake: 0, ph: Math.random() * TAU
@@ -603,8 +636,8 @@ const tmpA = [], tmpB = [], tmpC = [];
 /* ---------------------------- 6. ENTITIES --------------------------- */
 let nextId = 1;
 
-function snakeRadius(m) { return 3.4 + Math.sqrt(m) * 0.98; }
-function mouseRadius(m) { return 5 + Math.sqrt(m) * 1.25; }
+function snakeRadius(m) { return 3 + Math.sqrt(m) * 1.32; }
+function mouseRadius(m) { return 4 + Math.sqrt(m) * 2.1; }
 
 function makeSnake(x, y, mass, isPlayer) {
   const e = {
@@ -616,7 +649,7 @@ function makeSnake(x, y, mass, isPlayer) {
     ambush: false, stillT: 0, coil: 0,
     strikeCharge: 0, charging: false, strikeT: 0, cooldown: 0, strikePower: 0, stamina: 1,
     digest: 0, immune: CONFIG.SPAWN_IMMUNITY, inBush: null, bushT: 0,
-    kills: 0, maxMass: mass, born: 0, trailT: 0, hissT: rnd(2, 8),
+    kills: 0, maxMass: mass, born: 0, trailT: 0, hissT: rnd(5, 16),
     state: 'WANDER', stateT: 0, wx: x, wy: y, prey: null, patience: rnd(3, 10),
     sloppy: Math.random() < 0.28,     // careless bots keep the world unpredictable
     tickOff: rndInt(0, 3), flash: 0
@@ -677,6 +710,7 @@ function currentSpeed(e) {
 }
 
 function setMass(e, m) {
+  if (m > e.mass + 0.01) e.growPop = Math.min(1.2, (e.growPop || 0) + 0.55);
   e.mass = clamp(m, 2, 4000);
   e.maxHp = e.mass * CONFIG.HP_PER_MASS;
   if (e.hp > e.maxHp) e.hp = e.maxHp;
@@ -715,10 +749,10 @@ function moveEntity(e, dt) {
   // Fast movement inside a bush shakes the leaves: visible + audible from outside.
   if (e.inBush && sp > baseSpeed(e) * 0.45) {
     e.inBush.shake = Math.min(1, e.inBush.shake + dt * 3.2);
-    if (Math.random() < dt * 6) {
+    if (Math.random() < dt * 2.2) {
       World.rustle(e.x + rnd(-14, 14), e.y + rnd(-14, 14));
-      const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
-      if (d < 900) Sound.rustle(clamp(1 - d / 900, 0, 1) * 0.8);
+      const d2c = dist2(e.x, e.y, Camera.x, Camera.y);
+      if (d2c < 520 * 520) Sound.rustle(clamp(1 - Math.sqrt(d2c) / 520, 0, 1));
     }
   }
   // Anything moving fast sends a ground vibration a mouse can feel.
@@ -757,6 +791,7 @@ function updateSnakeBody(e, dt) {
 
 function updateSnake(e, dt) {
   e.immune = Math.max(0, e.immune - dt);
+  e.growPop = Math.max(0, (e.growPop || 0) - dt * 2.2);
   e.digest = Math.max(0, e.digest - dt);
   e.cooldown = Math.max(0, e.cooldown - dt);
   // Lunge stamina refills slowly, so a snake cannot hop its way across the map.
@@ -790,9 +825,9 @@ function updateSnake(e, dt) {
 
   e.hissT -= dt;
   if (e.hissT <= 0) {
-    e.hissT = rnd(4, 11);
+    e.hissT = rnd(9, 20);
     const d = Math.sqrt(dist2(e.x, e.y, Camera.x, Camera.y));
-    if (d < 700) Sound.hiss(clamp(1 - d / 700, 0, 1) * 0.5);
+    if (d < 440) Sound.hiss(clamp(1 - d / 440, 0, 1));
   }
   moveEntity(e, dt);
   updateSnakeBody(e, dt);
@@ -825,6 +860,7 @@ function releaseStrike(e) {
 
 function updateMouse(e, dt) {
   e.immune = Math.max(0, e.immune - dt);
+  e.growPop = Math.max(0, (e.growPop || 0) - dt * 2.2);
   e.squeakCd = Math.max(0, e.squeakCd - dt);
   e.exitT = Math.max(0, e.exitT - dt);
   e.flash = Math.max(0, e.flash - dt * 2);
@@ -1257,7 +1293,8 @@ const Camera = {
     const k = 1 - Math.pow(0.0015, dt);
     this.x = lerp(this.x, e.x, k);
     this.y = lerp(this.y, e.y, k);
-    const base = clamp(1.34 - Math.sqrt(e.mass) * 0.042, 0.55, 1.34);
+    // Zoom out only gently with size, so growing really looks like growing.
+    const base = clamp(1.20 - Math.sqrt(e.mass) * 0.026, 0.62, 1.20);
     this.targetZoom = base * (e.kind === 'snake' && e.ambush ? 1.12 : 1);
     this.zoom = lerp(this.zoom, this.targetZoom, 1 - Math.pow(0.02, dt));
     this.shake = Math.max(0, this.shake - dt * 2.6);
@@ -1273,18 +1310,50 @@ const Game = {
   start() {
     World.generate();
     this.entities.length = 0;
-    this.frame = 0;
+    this.frame = 0; this.recycleIdx = 0;
+    this.spawnPlayer();                       // the player first, then life around them
     for (let i = 0; i < CONFIG.BOT_COUNT; i++) this.spawnBot(Math.random() < CONFIG.SNAKE_BOT_SHARE);
-    this.spawnPlayer();
+  },
+
+  // Bots appear in a ring around the player, so the arena is always populated
+  // without ever dropping a predator straight onto their head.
+  ringPoint(minD, span) {
+    const p = this.player;
+    if (!p) return this.findSpawnPoint(CONFIG.START_MASS);
+    for (let t = 0; t < 20; t++) {
+      const a = Math.random() * TAU, d = rnd(minD, minD + span);
+      const x = clamp(p.x + Math.cos(a) * d, 120, World.size - 120);
+      const y = clamp(p.y + Math.sin(a) * d, 120, World.size - 120);
+      if (dist2(x, y, p.x, p.y) >= minD * minD) return { x, y };
+    }
+    return this.findSpawnPoint(CONFIG.START_MASS);
   },
 
   spawnBot(isSnake) {
-    const p = this.findSpawnPoint(CONFIG.START_MASS);
-    const mass = CONFIG.START_MASS * rnd(0.7, isSnake ? 3.4 : 2.6);
-    const e = isSnake ? makeSnake(p.x, p.y, mass, false) : makeMouse(p.x, p.y, mass, false);
+    const q = this.ringPoint(isSnake ? 950 : 560, CONFIG.TRAFFIC_RING);
+    const mass = CONFIG.START_MASS * rnd(0.7, isSnake ? 3.0 : 2.6);
+    const e = isSnake ? makeSnake(q.x, q.y, mass, false) : makeMouse(q.x, q.y, mass, false);
     e.immune = 1.2;
     this.entities.push(e);
     return e;
+  },
+
+  // Anything that wanders far off the player's map is quietly brought back,
+  // so the world never drains into the corners.
+  recycleStragglers() {
+    const p = this.player;
+    if (!p || !p.alive) return;
+    const ents = this.entities, R = CONFIG.RECYCLE_DIST;
+    for (let k = 0; k < 6 && ents.length; k++) {
+      this.recycleIdx = (this.recycleIdx + 1) % ents.length;
+      const e = ents[this.recycleIdx];
+      if (!e.alive || e.isPlayer || e.burrow) continue;
+      if (dist2(e.x, e.y, p.x, p.y) < R * R) continue;
+      const q = this.ringPoint(e.kind === 'snake' ? 950 : 560, CONFIG.TRAFFIC_RING);
+      e.x = q.x; e.y = q.y;
+      if (e.kind === 'snake') for (const sg of e.segs) { sg.x = q.x; sg.y = q.y; }
+      e.wx = q.x; e.wy = q.y; e.target = null; e.prey = null; e.state = e.kind === 'snake' ? 'WANDER' : 'FORAGE';
+    }
   },
 
   spawnPlayer() {
@@ -1347,6 +1416,7 @@ const Game = {
     this.interactions(dt);
     this.healing(dt);
     this.cleanup();
+    if ((this.frame & 15) === 0) this.recycleStragglers();
     Camera.follow(this.player && this.player.alive ? this.player : null, dt);
     UI.updateHints(dt);
   },
@@ -1501,7 +1571,7 @@ function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch
 
 /* ---------------------------- 11. RENDERER -------------------------- */
 const R = {
-  canvas: null, ctx: null, w: 0, h: 0, dpr: 1,
+  canvas: null, ctx: null, w: 0, h: 0, dpr: 1, dprScale: 1, frameAvg: 0.016, tuneT: 0,
   sandTile: null, sandPat: null, miniBase: null, miniSize: 210,
   viewL: 0, viewR: 0, viewT: 0, viewB: 0,
 
@@ -1512,8 +1582,20 @@ const R = {
     window.addEventListener('resize', () => this.resize());
     this.buildSand();
   },
+  // Frame-time watchdog: if the device cannot keep up, quietly render at a
+  // lower resolution instead of dropping frames. Raises it back when it can.
+  autoTune(dt) {
+    this.frameAvg = this.frameAvg * 0.92 + Math.min(dt, 0.2) * 0.08;
+    this.tuneT -= dt;
+    if (this.tuneT > 0) return;
+    if (this.frameAvg > 0.024 && this.dprScale > 0.5) {
+      this.dprScale = Math.max(0.5, this.dprScale - 0.16); this.tuneT = 1.2; this.resize();
+    } else if (this.frameAvg < 0.0175 && this.dprScale < 1) {
+      this.dprScale = Math.min(1, this.dprScale + 0.08); this.tuneT = 2.5; this.resize();
+    }
+  },
   resize() {
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);   // capped for performance
+    this.dpr = Math.min(2, window.devicePixelRatio || 1) * this.dprScale;   // capped for performance
     this.w = window.innerWidth; this.h = window.innerHeight;
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
@@ -1604,6 +1686,15 @@ const R = {
       for (let v = 0; v < 3; v++) { green.push(this.paintGreenBush(px[sc])); dry.push(this.paintDryBush(px[sc])); }
       this.bushSprites[0].push(green);
       this.bushSprites[1].push(dry);
+    }
+    // Hand the finished plants to the compositor as immutable bitmaps: a live
+    // <canvas> source can be re-uploaded to the GPU on every single draw,
+    // an ImageBitmap is uploaded once and then simply blitted.
+    if (window.createImageBitmap) {
+      for (let sp = 0; sp < 2; sp++) for (let sc = 0; sc < 3; sc++) for (let v = 0; v < 3; v++) {
+        const src = this.bushSprites[sp][sc][v];
+        createImageBitmap(src).then(bm => { this.bushSprites[sp][sc][v] = bm; }).catch(() => {});
+      }
     }
   },
 
@@ -2053,9 +2144,7 @@ const R = {
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(b.rot + wind + shake);
-      ctx.globalAlpha = 0.95;
       ctx.drawImage(this.bushSprites[b.species][b.sizeClass][b.variant], -size / 2, -size / 2, size, size);
-      ctx.globalAlpha = 1;
       ctx.restore();
       if (b.shake > 0.25 && Math.random() < b.shake * 0.4) {      // leaves flying off
         World.particle(b.x + rnd(-b.r * 0.7, b.r * 0.7), b.y + rnd(-b.r * 0.7, b.r * 0.7),
@@ -2144,9 +2233,10 @@ const R = {
         const dd = Math.abs(i - bi);
         if (dd < 3) swell = Math.max(swell, b.size * 0.8 * (1 - dd / 3) * Math.sin(Math.PI * clamp(b.t * 1.05, 0, 1)));
       }
-      rad[i] = (t < 0.08 ? e.r * (0.80 + (t / 0.08) * 0.20)          // slim neck
+      const pop = 1 + 0.2 * (e.growPop || 0);                         // a visible "I just ate" swell
+      rad[i] = ((t < 0.08 ? e.r * (0.80 + (t / 0.08) * 0.20)          // slim neck
                 : t < 0.58 ? e.r                                       // full girth
-                : e.r * (1 - Math.pow((t - 0.58) / 0.42, 1.45) * 0.88)) + swell;  // tapered tail
+                : e.r * (1 - Math.pow((t - 0.58) / 0.42, 1.45) * 0.88)) + swell) * pop;  // tapered tail
     }
     const outline = (scale, dx, dy) => {
       ctx.beginPath();
@@ -2266,7 +2356,7 @@ const R = {
   drawMouse(ctx, e, day) {
     const lit = 0.55 + 0.45 * day;
     const hop = Math.sin(e.hop) * clamp((e.speedNow || 0) / 120, 0, 1);
-    const r = e.r;
+    const r = e.r * (1 + 0.22 * (e.growPop || 0));   // pops bigger with every seed
     ctx.save();
     ctx.translate(e.x, e.y); ctx.rotate(e.angle);
     ctx.globalAlpha = (R.overdraw ? 0.72 : (e.inBush ? 0.55 : 1)) * (e.immune > 0 ? 0.62 : 1);
@@ -2443,6 +2533,27 @@ R.drawHUD = function (ctx) {
     if (p.kind === 'mouse' && p.venom > 0) {
       const h = nearestHealthyMouse(p);
       if (h) { ctx.fillStyle = '#8ce8ff'; ctx.beginPath(); ctx.arc(mx + h.x * k, my + h.y * k, 3.5, 0, TAU); ctx.fill(); }
+    }
+    // Your own senses, drawn on the map: a mouse feels anything moving fast
+    // nearby (even through a bush) and sees what is out in the open; a snake
+    // sees warm bodies at night and whatever crosses the bare sand.
+    const near = World.entGrid.query(p.x, p.y, 1500, tmpA);
+    for (let i = 0; i < near.length; i++) {
+      const o = near[i];
+      if (o === p || !o.alive || o.burrow) continue;
+      const d2 = dist2(p.x, p.y, o.x, o.y);
+      const fast = (o.speedNow || 0) > baseSpeed(o) * 0.5;
+      let sensed = false;
+      if (p.kind === 'mouse') {
+        sensed = (fast && d2 < CONFIG.VIBRATION_RADIUS * CONFIG.VIBRATION_RADIUS * 6.5)
+              || (!o.inBush && !(o.kind === 'snake' && o.ambush) && d2 < 820 * 820);
+      } else {
+        sensed = (o.kind === 'mouse' && World.isNight() && d2 < CONFIG.PIT_ORGAN_RANGE * CONFIG.PIT_ORGAN_RANGE * 4)
+              || (!o.inBush && d2 < 900 * 900) || (fast && d2 < 900 * 900);
+      }
+      if (!sensed) continue;
+      ctx.fillStyle = o.kind === 'mouse' ? 'rgba(240,214,170,0.9)' : 'rgba(198,96,62,0.9)';
+      ctx.beginPath(); ctx.arc(mx + o.x * k, my + o.y * k, o.kind === 'mouse' ? 2.4 : 3, 0, TAU); ctx.fill();
     }
     ctx.fillStyle = '#ffd86a';
     ctx.beginPath(); ctx.arc(mx + p.x * k, my + p.y * k, 4, 0, TAU); ctx.fill();
@@ -2872,6 +2983,7 @@ function loop(ts) {
   if (Game.state !== 'menu') {
     Input.layout();
     R.frame(acc / FIXED);
+    R.autoTune(dt);
   }
 }
 
